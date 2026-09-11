@@ -32,11 +32,6 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             {
                 Name = "customtabsjf12",
                 EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
-            },
-            new PluginPageInfo
-            {
-                Name = "customtabsjf12.js",
-                EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.js"
             }
         };
     }
