@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SRC_DIR="$REPO_ROOT/src/customtabs"
 DIST_DIR="$REPO_ROOT/dist/customtabs"
-VERSION="1.0.0.0"
+VERSION="1.0.1.0"
 ZIP_NAME="CustomTabsJF12-${VERSION}.zip"
 
 echo "Building Custom Tabs JF12 plugin..."

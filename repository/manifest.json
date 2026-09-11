@@ -8,6 +8,17 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.0.1.0",
+        "changelog": "Fix configuration page Add Tab button - improve event binding for Jellyfin Dashboard AJAX navigation",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/v1.0.1.0/CustomTabsJF12-1.0.1.0.zip",
+        "checksum": "4B953E1C66F578AA3DF1FFBC2033F916",
+        "timestamp": "2026-09-11T10:45:00Z",
+        "dependencies": [
+          "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
+        ]
+      },
+      {
         "version": "1.0.0.0",
         "changelog": "Initial release for Jellyfin 12",
         "targetAbi": "12.0.0.0",
