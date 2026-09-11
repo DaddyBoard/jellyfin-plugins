@@ -103,28 +103,63 @@ const CustomTabsJF12ConfigPage = {
     }
 };
 
-window.addEventListener('pageshow', function() {
+function initConfigPage() {
+    console.log('[CustomTabsJF12] Config page initialization started');
+    
     const page = document.getElementById('customTabsJF12ConfigPage');
-    if (page && page.classList.contains('page')) {
-        CustomTabsJF12ConfigPage.loadConfiguration();
-        
-        const form = document.getElementById('customTabsJF12ConfigForm');
+    if (!page) {
+        console.log('[CustomTabsJF12] Config page element not found, skipping init');
+        return;
+    }
+    
+    console.log('[CustomTabsJF12] Config page found, loading configuration');
+    CustomTabsJF12ConfigPage.loadConfiguration();
+    
+    const form = document.getElementById('customTabsJF12ConfigForm');
+    if (form) {
+        console.log('[CustomTabsJF12] Binding form submit handler');
         form.removeEventListener('submit', handleSubmit);
         form.addEventListener('submit', handleSubmit);
-        
-        const addBtn = document.getElementById('addTabBtn');
+    }
+    
+    const addBtn = document.getElementById('addTabBtn');
+    if (addBtn) {
+        console.log('[CustomTabsJF12] Binding Add Tab button click handler');
         addBtn.removeEventListener('click', handleAddTab);
         addBtn.addEventListener('click', handleAddTab);
+    } else {
+        console.warn('[CustomTabsJF12] Add Tab button not found!');
     }
-});
+    
+    console.log('[CustomTabsJF12] Config page initialization complete');
+}
 
 function handleSubmit(e) {
+    console.log('[CustomTabsJF12] Form submit handler called');
     e.preventDefault();
     CustomTabsJF12ConfigPage.onSubmit();
     return false;
 }
 
 function handleAddTab(e) {
+    console.log('[CustomTabsJF12] Add Tab button clicked');
     e.preventDefault();
     CustomTabsJF12ConfigPage.addTab();
 }
+
+window.addEventListener('pageshow', function(e) {
+    console.log('[CustomTabsJF12] pageshow event fired');
+    initConfigPage();
+});
+
+window.addEventListener('viewshow', function(e) {
+    console.log('[CustomTabsJF12] viewshow event fired');
+    if (e.detail && e.detail.type === 'customTabsJF12ConfigPage') {
+        initConfigPage();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('[CustomTabsJF12] DOMContentLoaded event fired');
+    initConfigPage();
+});
