@@ -1,0 +1,23 @@
+[
+  {
+    "guid": "7c3f8a92-4b1d-4e8f-9a2c-5d6e7f8a9b0c",
+    "name": "Custom Tabs JF12",
+    "description": "Add custom tabs to the Jellyfin navigation bar for quick access to external sites and tools. Built for Jellyfin 12.",
+    "overview": "Custom Tabs JF12 allows you to inject custom navigation buttons into the Jellyfin web interface that open external URLs in an overlay iframe.",
+    "owner": "DaddyBoard",
+    "category": "General",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release for Jellyfin 12",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/v1.0.0.0/CustomTabsJF12-1.0.0.0.zip",
+        "checksum": "94A463E54A6612A24548D98E328ABDEF",
+        "timestamp": "2026-09-11T10:30:00Z",
+        "dependencies": [
+          "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
+        ]
+      }
+    ]
+  }
+]
