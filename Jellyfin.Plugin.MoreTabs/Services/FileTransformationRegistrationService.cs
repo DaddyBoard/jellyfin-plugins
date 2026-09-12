@@ -1,13 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MoreTabs.Helpers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 
 namespace Jellyfin.Plugin.MoreTabs.Services;
 
@@ -23,6 +24,8 @@ public class FileTransformationRegistrationService : IHostedService
     }
 
     public static bool IsRegistered { get; private set; }
+
+    public static string? LastError { get; private set; }
 
     public static bool IsAssemblyLoaded()
     {
@@ -41,52 +44,110 @@ public class FileTransformationRegistrationService : IHostedService
             await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken).ConfigureAwait(false);
         }
 
+        LastError ??= "File Transformation was not found after startup retries";
         _logger.LogWarning("MoreTabs: File Transformation 3.0 was not found. Built-in index.html injection will be used instead");
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        Type? pluginInterfaceType = FindAssembly()?.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
-        pluginInterfaceType?.GetMethod("RemoveTransformation")?.Invoke(null, new object?[] { TransformationId });
+        try
+        {
+            Type? pluginInterfaceType = FindAssembly()?.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
+            pluginInterfaceType?.GetMethod("RemoveTransformation")?.Invoke(null, new object?[] { TransformationId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MoreTabs failed to unregister File Transformation");
+        }
+
         IsRegistered = false;
         return Task.CompletedTask;
     }
 
     private bool TryRegister()
     {
-        Assembly? fileTransformationAssembly = FindAssembly();
-        if (fileTransformationAssembly is null)
+        try
         {
+            Assembly? fileTransformationAssembly = FindAssembly();
+            if (fileTransformationAssembly is null)
+            {
+                return false;
+            }
+
+            Type? pluginInterfaceType = fileTransformationAssembly.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
+            if (pluginInterfaceType is null)
+            {
+                LastError = "File Transformation PluginInterface type is missing";
+                _logger.LogWarning("MoreTabs: {Error}", LastError);
+                return false;
+            }
+
+            MethodInfo? register = pluginInterfaceType.GetMethod("RegisterTransformation");
+            if (register is null)
+            {
+                LastError = "File Transformation RegisterTransformation method is missing";
+                _logger.LogWarning("MoreTabs: {Error}", LastError);
+                return false;
+            }
+
+            object? payload = CreatePayload(fileTransformationAssembly);
+            if (payload is null)
+            {
+                LastError = "Could not construct a File Transformation JObject payload";
+                _logger.LogWarning("MoreTabs: {Error}", LastError);
+                return false;
+            }
+
+            register.Invoke(null, new object?[] { payload });
+            IsRegistered = true;
+            LastError = null;
+            _logger.LogInformation("MoreTabs registered index.html with File Transformation 3.0");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.GetBaseException().Message;
+            _logger.LogWarning(ex, "MoreTabs File Transformation registration failed");
             return false;
         }
+    }
 
-        Type? pluginInterfaceType = fileTransformationAssembly.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
-        if (pluginInterfaceType is null)
+    private static object? CreatePayload(Assembly fileTransformationAssembly)
+    {
+        Assembly? newtonsoft = FindNewtonsoft(fileTransformationAssembly);
+        Type? jObjectType = newtonsoft?.GetType("Newtonsoft.Json.Linq.JObject");
+        MethodInfo? parse = jObjectType?.GetMethod("Parse", [typeof(string)]);
+        if (parse is null)
         {
-            _logger.LogWarning("MoreTabs: File Transformation assembly found but PluginInterface is missing");
-            return false;
+            return null;
         }
 
-        MethodInfo? register = pluginInterfaceType.GetMethod("RegisterTransformation");
-        if (register is null)
+        Dictionary<string, string> values = new Dictionary<string, string>
         {
-            _logger.LogWarning("MoreTabs: File Transformation PluginInterface.RegisterTransformation is missing");
-            return false;
-        }
-
-        JObject payload = new JObject
-        {
-            ["id"] = TransformationId,
+            ["id"] = TransformationId.ToString(),
             ["fileNamePattern"] = @"index\.html$",
-            ["callbackAssembly"] = typeof(TransformationPatches).Assembly.FullName,
-            ["callbackClass"] = typeof(TransformationPatches).FullName,
+            ["callbackAssembly"] = typeof(TransformationPatches).Assembly.FullName ?? string.Empty,
+            ["callbackClass"] = typeof(TransformationPatches).FullName ?? string.Empty,
             ["callbackMethod"] = nameof(TransformationPatches.IndexHtml)
         };
 
-        register.Invoke(null, new object?[] { payload });
-        IsRegistered = true;
-        _logger.LogInformation("MoreTabs registered index.html with File Transformation 3.0");
-        return true;
+        return parse.Invoke(null, [JsonSerializer.Serialize(values)]);
+    }
+
+    private static Assembly? FindNewtonsoft(Assembly fileTransformationAssembly)
+    {
+        AssemblyLoadContext? context = AssemblyLoadContext.All
+            .FirstOrDefault(alc => alc.Assemblies.Contains(fileTransformationAssembly));
+        Assembly? fromContext = context?.Assemblies
+            .FirstOrDefault(static assembly => string.Equals(assembly.GetName().Name, "Newtonsoft.Json", StringComparison.Ordinal));
+        if (fromContext is not null)
+        {
+            return fromContext;
+        }
+
+        return AssemblyLoadContext.All
+            .SelectMany(static alc => alc.Assemblies)
+            .FirstOrDefault(static assembly => string.Equals(assembly.GetName().Name, "Newtonsoft.Json", StringComparison.Ordinal));
     }
 
     private static Assembly? FindAssembly()

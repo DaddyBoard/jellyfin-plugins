@@ -44,6 +44,7 @@ public class MoreTabsController : ControllerBase
         {
             fileTransformationLoaded = FileTransformationRegistrationService.IsAssemblyLoaded(),
             fileTransformationRegistered = FileTransformationRegistrationService.IsRegistered,
+            lastError = FileTransformationRegistrationService.LastError,
             tabCount = global::Jellyfin.Plugin.MoreTabs.Plugin.Instance?.Configuration.Tabs.Count ?? 0
         });
     }

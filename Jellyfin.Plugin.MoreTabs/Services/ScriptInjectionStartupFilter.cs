@@ -31,8 +31,7 @@ public class ScriptInjectionStartupFilter : IStartupFilter
 
     private async Task InvokeAsync(HttpContext context, Func<Task> nextMw)
     {
-        if (FileTransformationRegistrationService.IsAssemblyLoaded()
-            || FileTransformationRegistrationService.IsRegistered
+        if (FileTransformationRegistrationService.IsRegistered
             || !IsIndexRequest(context.Request.Path.Value)
             || !HttpMethods.IsGet(context.Request.Method))
         {
