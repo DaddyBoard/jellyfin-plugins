@@ -53,9 +53,8 @@ public class FileTransformationRegistrationService : IHostedService
         try
         {
             Type? pluginInterfaceType = FindAssembly()?.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
-            MethodInfo? remove = pluginInterfaceType?.GetMethod("RemoveTransformation");
-            remove?.Invoke(null, new object?[] { TransformationId });
-            remove?.Invoke(null, new object?[] { TransformationRegexId });
+            TryRemove(pluginInterfaceType, TransformationId);
+            TryRemove(pluginInterfaceType, TransformationRegexId);
         }
         catch (Exception ex)
         {
@@ -92,20 +91,21 @@ public class FileTransformationRegistrationService : IHostedService
                 return false;
             }
 
-            object? exact = CreatePayload(fileTransformationAssembly, TransformationId, "index.html");
-            object? regex = CreatePayload(fileTransformationAssembly, TransformationRegexId, @"index\.html$");
-            if (exact is null || regex is null)
+            TryRemove(pluginInterfaceType, TransformationId);
+            TryRemove(pluginInterfaceType, TransformationRegexId);
+
+            object? payload = CreatePayload(fileTransformationAssembly, TransformationId, @"^index\.html$");
+            if (payload is null)
             {
                 LastError = "Could not construct a File Transformation JObject payload";
                 _logger.LogWarning("MoreTabs: {Error}", LastError);
                 return false;
             }
 
-            register.Invoke(null, new object?[] { exact });
-            register.Invoke(null, new object?[] { regex });
+            register.Invoke(null, new object?[] { payload });
             IsRegistered = true;
             LastError = null;
-            _logger.LogInformation("MoreTabs registered index.html with File Transformation 3.0 via HTTP callback");
+            _logger.LogInformation("MoreTabs registered ^index.html$ with File Transformation 3.0 via HTTP callback");
             return true;
         }
         catch (Exception ex)
@@ -114,6 +114,11 @@ public class FileTransformationRegistrationService : IHostedService
             _logger.LogWarning(ex, "MoreTabs File Transformation registration failed");
             return false;
         }
+    }
+
+    private static void TryRemove(Type? pluginInterfaceType, Guid id)
+    {
+        pluginInterfaceType?.GetMethod("RemoveTransformation")?.Invoke(null, new object?[] { id });
     }
 
     private static object? CreatePayload(Assembly fileTransformationAssembly, Guid id, string fileNamePattern)
