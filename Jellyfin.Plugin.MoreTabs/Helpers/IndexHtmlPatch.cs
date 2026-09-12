@@ -8,18 +8,18 @@ public static class IndexHtmlPatch
 
     public static string Apply(string html, string scriptSrc)
     {
-        if (string.IsNullOrEmpty(html) || html.IndexOf(Marker, StringComparison.OrdinalIgnoreCase) >= 0)
+        if (string.IsNullOrEmpty(html) || html.Contains(Marker, StringComparison.OrdinalIgnoreCase))
         {
             return html;
         }
 
         int bodyClose = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
-        string tag = "<script src=\"" + scriptSrc + "\" defer></script>";
+        string tag = string.Concat("<script src=\"", scriptSrc, "\" defer></script>");
         if (bodyClose >= 0)
         {
-            return html.Substring(0, bodyClose) + tag + "\n" + html.Substring(bodyClose);
+            return string.Concat(html.AsSpan(0, bodyClose), tag, "\n", html.AsSpan(bodyClose));
         }
 
-        return html + tag;
+        return string.Concat(html, tag);
     }
 }
