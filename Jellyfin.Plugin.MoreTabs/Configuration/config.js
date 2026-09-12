@@ -20,7 +20,7 @@ export default function (view) {
         row.querySelector('[data-id=id]').value = tab.Id || newId();
         row.querySelector('[data-id=title]').value = tab.Title || '';
         row.querySelector('[data-id=url]').value = tab.Url || '';
-        row.querySelector('[data-id=icon]').value = tab.Icon || 'tab';
+        row.querySelector('[data-id=icon]').value = tab.Icon || '';
         row.querySelector('[data-id=enabled]').checked = tab.Enabled !== false;
         list.appendChild(node);
         if (window.CustomElements && window.CustomElements.upgradeSubtree) {
@@ -35,7 +35,7 @@ export default function (view) {
                 Id: row.querySelector('[data-id=id]').value || newId(),
                 Title: row.querySelector('[data-id=title]').value.trim(),
                 Url: row.querySelector('[data-id=url]').value.trim(),
-                Icon: row.querySelector('[data-id=icon]').value.trim() || 'tab',
+                Icon: row.querySelector('[data-id=icon]').value.trim(),
                 Enabled: row.querySelector('[data-id=enabled]').checked
             });
         });
@@ -57,7 +57,7 @@ export default function (view) {
             const tabs = config && config.Tabs ? config.Tabs : [];
             tabs.forEach(addRow);
             if (tabs.length === 0) {
-                addRow({ Id: newId(), Title: '', Url: '', Icon: 'tab', Enabled: true });
+                addRow({ Id: newId(), Title: '', Url: '', Icon: '', Enabled: true });
             }
         }).catch(function (error) {
             console.error('MoreTabs: failed to load configuration', error);
@@ -175,7 +175,7 @@ export default function (view) {
         }
         started = true;
         addButton.addEventListener('click', function () {
-            addRow({ Id: newId(), Title: 'New tab', Url: '', Icon: 'tab', Enabled: true });
+            addRow({ Id: newId(), Title: 'New tab', Url: '', Icon: '', Enabled: true });
         });
         form.addEventListener('submit', save);
         list.addEventListener('click', onListClick);

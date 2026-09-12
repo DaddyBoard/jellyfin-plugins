@@ -16,7 +16,7 @@ public class TabConfig
 
     public string Url { get; set; } = string.Empty;
 
-    public string Icon { get; set; } = "tab";
+    public string Icon { get; set; } = string.Empty;
 
     public bool Enabled { get; set; } = true;
 }

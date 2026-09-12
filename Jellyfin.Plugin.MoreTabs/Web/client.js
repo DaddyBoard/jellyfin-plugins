@@ -186,9 +186,12 @@
     }
 
     function createIcon(name) {
+        if (!name) {
+            return null;
+        }
         var icon = document.createElement('span');
         icon.className = 'material-icons';
-        icon.textContent = name || 'tab';
+        icon.textContent = name;
         return icon;
     }
 
@@ -198,7 +201,10 @@
         a.setAttribute(NAV_ATTR, tab.Id);
         a.href = HASH_PREFIX + encodeURIComponent(tab.Id);
         a.title = tab.Title;
-        a.appendChild(createIcon(tab.Icon));
+        var icon = createIcon(tab.Icon);
+        if (icon) {
+            a.appendChild(icon);
+        }
         var label = document.createElement('span');
         label.textContent = tab.Title;
         a.appendChild(label);
@@ -215,7 +221,10 @@
         a.className = 'moretabs-drawer-btn';
         a.setAttribute(NAV_ATTR, tab.Id);
         a.href = HASH_PREFIX + encodeURIComponent(tab.Id);
-        a.appendChild(createIcon(tab.Icon));
+        var icon = createIcon(tab.Icon);
+        if (icon) {
+            a.appendChild(icon);
+        }
         var label = document.createElement('span');
         label.textContent = tab.Title;
         a.appendChild(label);
