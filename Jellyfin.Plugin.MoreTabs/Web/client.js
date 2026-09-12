@@ -82,11 +82,12 @@
             '#' + OVERLAY_ID + '{position:fixed;left:0;right:0;bottom:0;z-index:1050;background:var(--theme-body-bg,#101010);display:none;}',
             '#' + OVERLAY_ID + '.is-open{display:block;}',
             '#' + FRAME_ID + '{width:100%;height:100%;border:0;background:transparent;}',
-            '.moretabs-nav-btn{display:inline-flex;align-items:center;gap:6px;color:inherit;text-decoration:none;text-transform:none;cursor:pointer;border-radius:8px;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
-            '.moretabs-nav-btn:not(.MuiButton-root){min-height:32px;padding:6px 10px;margin:0 2px;border:0;background:transparent;font:inherit;opacity:.72;}',
+            '.moretabs-nav-btn{display:inline-flex;align-items:center;gap:4px;color:inherit;text-decoration:none;text-transform:none;cursor:pointer;border-radius:8px;font-size:var(--moretabs-nav-font-size,0.875rem);font-weight:var(--moretabs-nav-font-weight,500);line-height:var(--moretabs-nav-line-height,1.75);letter-spacing:0.02857em;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
+            '.moretabs-nav-btn span:not(.material-icons){font-size:inherit;font-weight:inherit;line-height:inherit;}',
+            '.moretabs-nav-btn:not(.MuiButton-root){min-height:auto;padding:6px 8px;margin:0;border:0;background:transparent;opacity:.72;}',
             '.moretabs-nav-btn:not(.MuiButton-root):hover,.moretabs-nav-btn:not(.MuiButton-root).is-active{opacity:1;background-color:rgba(255,255,255,.08);background-color:color-mix(in srgb,currentColor 8%,transparent);}',
             '.moretabs-nav-btn.MuiButton-root:hover,.moretabs-nav-btn.MuiButton-root.is-active{background-color:var(--mui-palette-action-hover,rgba(255,255,255,.08));}',
-            '.moretabs-nav-btn .material-icons{font-size:20px;line-height:1;}',
+            '.moretabs-nav-btn .material-icons{font-size:var(--moretabs-nav-icon-size,1.125rem);width:var(--moretabs-nav-icon-size,1.125rem);height:var(--moretabs-nav-icon-size,1.125rem);line-height:1;}',
             '.moretabs-divider{display:inline-flex;align-items:center;padding:0 6px;margin:0 2px;opacity:.4;pointer-events:none;user-select:none;line-height:1;cursor:default;}',
             '.moretabs-drawer-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 16px;border:0;background:transparent;color:inherit;text-decoration:none;font:inherit;cursor:pointer;opacity:.85;text-align:left;border-radius:8px;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
             '.moretabs-drawer-btn.is-active,.moretabs-drawer-btn:hover{opacity:1;background-color:rgba(255,255,255,.08);background-color:color-mix(in srgb,currentColor 8%,transparent);}',
@@ -410,11 +411,48 @@
         return null;
     }
 
+    function applyNativeNavMetrics(host) {
+        var native = null;
+        var links = host.querySelectorAll('a.MuiButton-root,button.MuiButton-root,a,button');
+        for (var i = 0; i < links.length; i++) {
+            if (links[i].hasAttribute(NAV_ATTR)) {
+                continue;
+            }
+            if (String(links[i].className || '').indexOf('MuiButton') !== -1) {
+                native = links[i];
+                break;
+            }
+        }
+        if (!native) {
+            return;
+        }
+        var cs = window.getComputedStyle(native);
+        var iconEl = native.querySelector('svg, .MuiSvgIcon-root, .material-icons');
+        var iconSize = '1.125rem';
+        if (iconEl) {
+            var iconBox = iconEl.getBoundingClientRect();
+            if (iconBox.height > 0) {
+                iconSize = Math.round(iconBox.height) + 'px';
+            } else {
+                var iconCs = window.getComputedStyle(iconEl);
+                if (iconCs.fontSize) {
+                    iconSize = iconCs.fontSize;
+                }
+            }
+        }
+        var root = document.documentElement;
+        root.style.setProperty('--moretabs-nav-font-size', cs.fontSize || '0.875rem');
+        root.style.setProperty('--moretabs-nav-font-weight', cs.fontWeight || '500');
+        root.style.setProperty('--moretabs-nav-line-height', cs.lineHeight || '1.75');
+        root.style.setProperty('--moretabs-nav-icon-size', iconSize);
+    }
+
     function injectHeader() {
         var host = findHeaderHost();
         if (!host) {
             return false;
         }
+        applyNativeNavMetrics(host);
         var existing = host.querySelectorAll('[' + NAV_ATTR + ']');
         if (existing.length === state.tabs.length) {
             return true;
