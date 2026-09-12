@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "checksum": "8a66d0d9376efcf6d0028f783b3bd051",
+        "changelog": "Merge branch 'main' of https://github.com/DaddyBoard/jellyfin-plugins",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/MoreTabs-v1.0.0.2/MoreTabs_1.0.0.2.zip",
+        "timestamp": "2026-09-12T22:01:49Z",
+        "version": "1.0.0.2"
+      },
+      {
         "checksum": "970180362ed47416305d8c287589d7f2",
         "changelog": "Merge branch 'main' of https://github.com/DaddyBoard/jellyfin-plugins",
         "targetAbi": "12.0.0.0",
