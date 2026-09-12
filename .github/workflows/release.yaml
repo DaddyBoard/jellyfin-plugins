@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "manifest.json"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Plugin version such as 1.0.0.0
+        required: false
+      changelog:
+        description: Changelog shown in Jellyfin
+        required: false
+        default: Automated release
+
+concurrency:
+  group: moretabs-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="$(python3 .github/scripts/next-version.py manifest.json)"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publish plugin
+        run: >
+          dotnet publish Jellyfin.Plugin.MoreTabs/Jellyfin.Plugin.MoreTabs.csproj
+          -c Release
+          -o publish
+          -p:Version=${{ steps.version.outputs.value }}
+          -p:AssemblyVersion=${{ steps.version.outputs.value }}
+          -p:FileVersion=${{ steps.version.outputs.value }}
+
+      - name: Package zip
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+          version = os.environ["VERSION"]
+          zip_name = f"MoreTabs_{version}.zip"
+          with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as archive:
+              for path in Path("publish").glob("*.dll"):
+                  archive.write(path, path.name)
+          print(zip_name)
+          PY
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.value }}
+          TAG: ${{ steps.version.outputs.tag }}
+          CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
+        run: |
+          ZIP="MoreTabs_${VERSION}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            gh release create "$TAG" "$ZIP" --title "MoreTabs $VERSION" --notes "$CHANGELOG"
+          fi
+
+      - name: Update manifest
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          TAG: ${{ steps.version.outputs.tag }}
+          CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
+          REPO: ${{ github.repository }}
+        run: |
+          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/MoreTabs_${VERSION}.zip"
+          python3 .github/scripts/update-manifest.py "MoreTabs_${VERSION}.zip" "$VERSION" "$SOURCE_URL"
+
+      - name: Commit manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "No manifest changes"
+            exit 0
+          fi
+          git commit -m "chore: publish MoreTabs ${{ steps.version.outputs.value }}"
+          git push

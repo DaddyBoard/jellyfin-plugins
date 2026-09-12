@@ -1,0 +1,10 @@
+name: Official publish disabled
+
+on:
+  workflow_dispatch:
+
+jobs:
+  skipped:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Official jellyfin-meta-plugins publish is disabled. Use the Release workflow."

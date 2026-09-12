@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "9f3c2a71-6d84-4b1e-9e2a-1c8f0d5a7b33",
+    "name": "MoreTabs",
+    "description": "Adds custom items next to Favourites, Movies, and Shows in the Jellyfin 12 web client. Each item opens an in-app iframe of a URL you configure.",
+    "overview": "Add extra navbar items that open iframe pages",
+    "owner": "DaddyBoard",
+    "category": "General",
+    "versions": []
+  }
+]

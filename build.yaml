@@ -1,0 +1,16 @@
+---
+name: "MoreTabs"
+guid: "9f3c2a71-6d84-4b1e-9e2a-1c8f0d5a7b33"
+version: "1.0.0.0"
+targetAbi: "12.0.0.0"
+framework: "net10.0"
+overview: "Add extra navbar items that open iframe pages"
+description: >
+  Adds custom items next to Favourites, Movies, and Shows in the Jellyfin 12
+  web client. Each item opens an in-app iframe of a URL you configure.
+category: "General"
+owner: "fazmc"
+artifacts:
+- "Jellyfin.Plugin.MoreTabs.dll"
+changelog: >
+  Initial Jellyfin 12 release
