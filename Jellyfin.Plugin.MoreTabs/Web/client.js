@@ -4,7 +4,7 @@
     }
 
     var STYLE_ID = 'moretabs-style-v5';
-    var SKIN = '5';
+    var SKIN = '6';
     var OVERLAY_ID = 'moretabs-overlay';
     var FRAME_ID = 'moretabs-frame';
     var NAV_ATTR = 'data-moretabs-id';
@@ -311,20 +311,49 @@
         return icon;
     }
 
+    function libraryButtonText(el) {
+        var text = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return text === 'favourites' || text === 'favorites' || text === 'movies' || text === 'shows' || text === 'tv shows';
+    }
+
     function nativeHeaderButton(host) {
-        if (!host) {
-            return null;
+        var scopes = [];
+        if (host) {
+            scopes.push(host);
         }
-        var links = host.querySelectorAll('a.MuiButton-root,button.MuiButton-root');
-        for (var i = 0; i < links.length; i++) {
-            if (!links[i].hasAttribute(NAV_ATTR)) {
-                return links[i];
+        var toolbar = document.querySelector('.MuiToolbar-root');
+        if (toolbar && scopes.indexOf(toolbar) === -1) {
+            scopes.push(toolbar);
+        }
+        var i;
+        var links;
+        var el;
+        for (i = 0; i < scopes.length; i++) {
+            links = scopes[i].querySelectorAll('a.MuiButton-root,button.MuiButton-root');
+            for (var j = 0; j < links.length; j++) {
+                el = links[j];
+                if (el.hasAttribute(NAV_ATTR) || !isVisible(el)) {
+                    continue;
+                }
+                if (libraryButtonText(el) && String(el.className).indexOf('MuiButton-sizeLarge') === -1) {
+                    return el;
+                }
+            }
+        }
+        for (i = 0; i < scopes.length; i++) {
+            links = scopes[i].querySelectorAll('a.MuiButton-sizeMedium,button.MuiButton-sizeMedium');
+            for (var k = 0; k < links.length; k++) {
+                el = links[k];
+                if (!el.hasAttribute(NAV_ATTR) && isVisible(el)) {
+                    return el;
+                }
             }
         }
         return null;
     }
 
     function createHeaderItem(tab) {
+        var native = nativeHeaderButton(findHeaderHost());
         if (isDivider(tab)) {
             var divider = document.createElement('span');
             divider.className = 'moretabs-divider';
@@ -332,17 +361,20 @@
             divider.setAttribute('data-moretabs-skin', SKIN);
             divider.setAttribute('aria-hidden', 'true');
             divider.textContent = '|';
+            if (native) {
+                var dcs = window.getComputedStyle(native);
+                divider.style.fontSize = dcs.fontSize;
+                divider.style.fontWeight = dcs.fontWeight;
+                divider.style.fontFamily = dcs.fontFamily;
+                divider.style.lineHeight = dcs.lineHeight;
+            }
             return divider;
         }
-        var native = nativeHeaderButton(findHeaderHost());
-        var a = native ? native.cloneNode(false) : document.createElement('a');
-        if (native) {
-            a.className = native.className;
-            a.removeAttribute('style');
-            a.removeAttribute('id');
-        } else {
-            a.className = 'MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-disableElevation';
-        }
+        var a = document.createElement('a');
+        a.className = native
+            ? native.className
+            : 'MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit';
+        a.tabIndex = 0;
         a.setAttribute(NAV_ATTR, tabKey(tab));
         a.setAttribute('data-moretabs-skin', SKIN);
         a.href = hashForTab(tab);
@@ -351,10 +383,11 @@
         if (iconName) {
             var wrap = document.createElement('span');
             var nativeWrap = native && native.querySelector('.MuiButton-startIcon');
-            wrap.className = nativeWrap ? nativeWrap.className : 'MuiButton-startIcon MuiButton-iconSizeMedium';
+            wrap.className = nativeWrap ? nativeWrap.className : 'MuiButton-icon MuiButton-startIcon MuiButton-iconSizeMedium';
             var icon = document.createElement('span');
-            var nativeSvg = native && native.querySelector('.MuiSvgIcon-root, .MuiIcon-root, svg');
-            icon.className = (nativeSvg ? String(nativeSvg.className) + ' ' : 'MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ') + 'material-icons';
+            var nativeSvg = native && native.querySelector('.MuiSvgIcon-root, .MuiIcon-root');
+            icon.className = (nativeSvg ? nativeSvg.getAttribute('class') + ' ' : 'MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ') + 'material-icons';
+            icon.setAttribute('aria-hidden', 'true');
             icon.textContent = iconName;
             wrap.appendChild(icon);
             a.appendChild(wrap);
