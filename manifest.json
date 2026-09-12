@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "checksum": "8ecf2afd99c3fe28eec181fcf25d3640",
+        "changelog": "Update client.js",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/MoreTabs-v1.0.0.10/MoreTabs_1.0.0.10.zip",
+        "timestamp": "2026-09-12T22:47:28Z",
+        "version": "1.0.0.10"
+      },
+      {
         "checksum": "281ad55385dff81086aa398176fe2295",
         "changelog": "Update client.js",
         "targetAbi": "12.0.0.0",
