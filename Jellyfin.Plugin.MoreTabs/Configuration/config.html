@@ -4,15 +4,18 @@
             <div class="sectionTitleContainer">
                 <h2 class="sectionTitle">MoreTabs</h2>
             </div>
-            <p>Add extra items next to Favourites, Movies, and Shows. Each item opens an in-app iframe of the URL you set.</p>
+            <p>Add extra items next to Favourites, Movies, and Shows. Each item opens an in-app iframe of the URL you set. Dividers show as | and are not clickable.</p>
             <p>MoreTabs injects its own script into the web client. File Transformation 3.0 is optional extra coverage.</p>
             <p id="moreTabsStatus" class="fieldDescription">Checking injection...</p>
         </div>
         <form id="MoreTabsConfigForm">
             <div id="moreTabsList"></div>
-            <div style="margin:1em 0;">
-                <button is="emby-button" type="button" class="raised block" id="btnAddMoreTab">
+            <div style="margin:1em 0;display:flex;gap:0.5em;flex-wrap:wrap;">
+                <button is="emby-button" type="button" class="raised" id="btnAddMoreTab">
                     <span>Add tab</span>
+                </button>
+                <button is="emby-button" type="button" class="raised" id="btnAddMoreDivider">
+                    <span>Add Divider</span>
                 </button>
             </div>
             <div>
@@ -21,18 +24,29 @@
                 </button>
             </div>
         </form>
+        <style>
+            #MoreTabsConfigPage [data-field=divider-only]{display:none;}
+            #MoreTabsConfigPage [data-kind=divider] [data-field=tab-only]{display:none;}
+            #MoreTabsConfigPage [data-kind=divider] [data-field=divider-only]{display:block;opacity:.7;font-size:1.35em;padding:.35em 0;}
+        </style>
         <template id="moreTabTemplate">
             <div class="paperList" data-id="tab-row" style="padding:1em;margin-bottom:1em;">
-                <div class="inputContainer">
+                <div data-field="divider-only">|</div>
+                <div class="inputContainer" data-field="tab-only">
                     <input is="emby-input" type="text" data-id="title" label="Title:" />
                 </div>
-                <div class="inputContainer">
+                <div class="inputContainer" data-field="tab-only">
                     <input is="emby-input" type="text" data-id="url" label="URL:" />
                     <div class="fieldDescription">https://example.com or a path on this server</div>
                 </div>
-                <div class="inputContainer">
-                    <input is="emby-input" type="text" data-id="icon" label="Material icon:" />
-                    <div class="fieldDescription">Optional. Leave blank for no icon. Examples: movie, live_tv, favorite</div>
+                <div class="inputContainer" data-field="tab-only">
+                    <select is="emby-select" data-id="icon" label="Icon:">
+                        <option value="">None</option>
+                    </select>
+                    <div class="fieldDescription" style="display:flex;align-items:center;gap:8px;margin-top:.4em;">
+                        <span data-id="icon-preview" class="material-icons" style="font-size:22px;line-height:1;"></span>
+                        <span>Shown next to the tab title</span>
+                    </div>
                 </div>
                 <div class="checkboxContainer checkboxContainer-withDescription">
                     <label class="emby-checkbox-label">

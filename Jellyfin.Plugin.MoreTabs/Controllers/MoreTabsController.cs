@@ -44,7 +44,7 @@ public class MoreTabsController : ControllerBase
     public ActionResult<IEnumerable<TabConfig>> GetConfig()
     {
         List<TabConfig> tabs = global::Jellyfin.Plugin.MoreTabs.Plugin.Instance?.Configuration.Tabs ?? new List<TabConfig>();
-        return Ok(tabs.Where(static t => t.Enabled && !string.IsNullOrWhiteSpace(t.Title) && !string.IsNullOrWhiteSpace(t.Url)).ToList());
+        return Ok(tabs.Where(static t => t.Enabled && (t.Divider || (!string.IsNullOrWhiteSpace(t.Title) && !string.IsNullOrWhiteSpace(t.Url)))).ToList());
     }
 
     [HttpGet("Status")]

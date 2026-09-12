@@ -19,4 +19,6 @@ public class TabConfig
     public string Icon { get; set; } = string.Empty;
 
     public bool Enabled { get; set; } = true;
+
+    public bool Divider { get; set; }
 }

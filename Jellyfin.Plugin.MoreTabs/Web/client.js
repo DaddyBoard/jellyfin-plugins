@@ -83,8 +83,10 @@
             '.moretabs-nav-btn{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:6px 10px;margin:0 2px;border:0;background:transparent;color:inherit;text-decoration:none;text-transform:none;font:inherit;cursor:pointer;opacity:.72;border-radius:8px;}',
             '.moretabs-nav-btn:hover,.moretabs-nav-btn.is-active{opacity:1;}',
             '.moretabs-nav-btn .material-icons{font-size:20px;line-height:1;}',
+            '.moretabs-divider{display:inline-flex;align-items:center;padding:0 6px;margin:0 2px;opacity:.4;pointer-events:none;user-select:none;line-height:1;cursor:default;}',
             '.moretabs-drawer-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 16px;border:0;background:transparent;color:inherit;text-decoration:none;font:inherit;cursor:pointer;opacity:.85;text-align:left;}',
-            '.moretabs-drawer-btn.is-active,.moretabs-drawer-btn:hover{opacity:1;}'
+            '.moretabs-drawer-btn.is-active,.moretabs-drawer-btn:hover{opacity:1;}',
+            '.moretabs-drawer-divider{display:flex;align-items:center;justify-content:center;padding:4px 0;opacity:.35;pointer-events:none;user-select:none;cursor:default;}'
         ].join('');
         document.head.appendChild(style);
     }
@@ -180,9 +182,26 @@
             return;
         }
         var tab = findTab(id);
-        if (tab) {
+        if (tab && !isDivider(tab)) {
             showOverlay(tab);
         }
+    }
+
+    function isDivider(tab) {
+        return !!(tab && (tab.Divider || tab.divider));
+    }
+
+    function isAdminArea() {
+        var hash = (window.location.hash || '').toLowerCase();
+        return hash.indexOf('/dashboard') !== -1 || hash.indexOf('configurationpage') !== -1;
+    }
+
+    function looksLikeAdminNav(el) {
+        if (!el) {
+            return false;
+        }
+        var text = (el.textContent || '').replace(/\s+/g, ' ').toLowerCase();
+        return text.indexOf('plugins') !== -1 && (text.indexOf('dashboard') !== -1 || text.indexOf('users') !== -1 || text.indexOf('libraries') !== -1);
     }
 
     function createIcon(name) {
@@ -195,7 +214,15 @@
         return icon;
     }
 
-    function createHeaderButton(tab) {
+    function createHeaderItem(tab) {
+        if (isDivider(tab)) {
+            var divider = document.createElement('span');
+            divider.className = 'moretabs-divider';
+            divider.setAttribute(NAV_ATTR, tab.Id);
+            divider.setAttribute('aria-hidden', 'true');
+            divider.textContent = '|';
+            return divider;
+        }
         var a = document.createElement('a');
         a.className = 'moretabs-nav-btn';
         a.setAttribute(NAV_ATTR, tab.Id);
@@ -216,7 +243,15 @@
         return a;
     }
 
-    function createDrawerButton(tab) {
+    function createDrawerItem(tab) {
+        if (isDivider(tab)) {
+            var divider = document.createElement('span');
+            divider.className = 'moretabs-drawer-divider';
+            divider.setAttribute(NAV_ATTR, tab.Id);
+            divider.setAttribute('aria-hidden', 'true');
+            divider.textContent = '|';
+            return divider;
+        }
         var a = document.createElement('a');
         a.className = 'moretabs-drawer-btn';
         a.setAttribute(NAV_ATTR, tab.Id);
@@ -248,20 +283,23 @@
     }
 
     function findHeaderHost() {
+        if (isAdminArea()) {
+            return null;
+        }
         var toolbars = document.querySelectorAll('.MuiToolbar-root');
         for (var i = 0; i < toolbars.length; i++) {
             var toolbar = toolbars[i];
-            if (!isVisible(toolbar)) {
+            if (!isVisible(toolbar) || toolbar.closest('.MuiDrawer-root, .MuiDrawer-paper, .mainDrawer')) {
                 continue;
             }
             var links = toolbar.querySelectorAll('a,button');
             for (var j = 0; j < links.length; j++) {
                 if (looksLikeFavorites(links[j])) {
-                    return links[j].parentElement;
+                    var host = links[j].parentElement;
+                    if (host && !host.closest('.MuiDrawer-root, .MuiDrawer-paper, .mainDrawer')) {
+                        return host;
+                    }
                 }
-            }
-            if (toolbar.querySelector('a[href*="home"], a[href*="/list"]')) {
-                return toolbar;
             }
         }
         return null;
@@ -288,28 +326,43 @@
             }
         }
         state.tabs.forEach(function (tab) {
-            var btn = createHeaderButton(tab);
+            var item = createHeaderItem(tab);
             if (before) {
-                host.insertBefore(btn, before);
+                host.insertBefore(item, before);
             } else {
-                host.appendChild(btn);
+                host.appendChild(item);
             }
         });
         return true;
     }
 
     function findDrawerHost() {
+        if (isAdminArea()) {
+            return null;
+        }
         var candidates = [
             document.querySelector('.MuiDrawer-paper'),
             document.querySelector('.mainDrawer-scrollContainer'),
             document.querySelector('.mainDrawer')
         ];
         for (var i = 0; i < candidates.length; i++) {
-            if (isVisible(candidates[i])) {
-                return candidates[i];
+            var host = candidates[i];
+            if (isVisible(host) && !looksLikeAdminNav(host)) {
+                var links = host.querySelectorAll('a,button');
+                for (var j = 0; j < links.length; j++) {
+                    if (looksLikeFavorites(links[j])) {
+                        return host;
+                    }
+                }
             }
         }
         return null;
+    }
+
+    function removeInjected() {
+        document.querySelectorAll('[' + NAV_ATTR + '], [data-moretabs-drawer]').forEach(function (el) {
+            el.remove();
+        });
     }
 
     function injectDrawer() {
@@ -328,7 +381,7 @@
         wrap.setAttribute('data-moretabs-drawer', '1');
         wrap.innerHTML = '';
         state.tabs.forEach(function (tab) {
-            wrap.appendChild(createDrawerButton(tab));
+            wrap.appendChild(createDrawerItem(tab));
         });
         if (!wrap.parentElement) {
             host.appendChild(wrap);
@@ -337,6 +390,11 @@
     }
 
     function inject() {
+        if (isAdminArea()) {
+            removeInjected();
+            hideOverlay();
+            return;
+        }
         if (!state.loaded || state.tabs.length === 0) {
             return;
         }
