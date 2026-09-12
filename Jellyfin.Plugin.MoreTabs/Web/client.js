@@ -8,11 +8,13 @@
     var FRAME_ID = 'moretabs-frame';
     var NAV_ATTR = 'data-moretabs-id';
     var HASH_PREFIX = '#/moretabs/';
+    var QUERY_KEY = 'moretabs';
 
     var state = {
         tabs: [],
         loaded: false,
         injectTimer: 0,
+        titleTimer: 0,
         lastError: null
     };
 
@@ -80,12 +82,14 @@
             '#' + OVERLAY_ID + '{position:fixed;left:0;right:0;bottom:0;z-index:1050;background:var(--theme-body-bg,#101010);display:none;}',
             '#' + OVERLAY_ID + '.is-open{display:block;}',
             '#' + FRAME_ID + '{width:100%;height:100%;border:0;background:transparent;}',
-            '.moretabs-nav-btn{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:6px 10px;margin:0 2px;border:0;background:transparent;color:inherit;text-decoration:none;text-transform:none;font:inherit;cursor:pointer;opacity:.72;border-radius:8px;}',
-            '.moretabs-nav-btn:hover,.moretabs-nav-btn.is-active{opacity:1;}',
+            '.moretabs-nav-btn{display:inline-flex;align-items:center;gap:6px;color:inherit;text-decoration:none;text-transform:none;cursor:pointer;border-radius:8px;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
+            '.moretabs-nav-btn:not(.MuiButton-root){min-height:32px;padding:6px 10px;margin:0 2px;border:0;background:transparent;font:inherit;opacity:.72;}',
+            '.moretabs-nav-btn:not(.MuiButton-root):hover,.moretabs-nav-btn:not(.MuiButton-root).is-active{opacity:1;background-color:rgba(255,255,255,.08);background-color:color-mix(in srgb,currentColor 8%,transparent);}',
+            '.moretabs-nav-btn.MuiButton-root:hover,.moretabs-nav-btn.MuiButton-root.is-active{background-color:var(--mui-palette-action-hover,rgba(255,255,255,.08));}',
             '.moretabs-nav-btn .material-icons{font-size:20px;line-height:1;}',
             '.moretabs-divider{display:inline-flex;align-items:center;padding:0 6px;margin:0 2px;opacity:.4;pointer-events:none;user-select:none;line-height:1;cursor:default;}',
-            '.moretabs-drawer-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 16px;border:0;background:transparent;color:inherit;text-decoration:none;font:inherit;cursor:pointer;opacity:.85;text-align:left;}',
-            '.moretabs-drawer-btn.is-active,.moretabs-drawer-btn:hover{opacity:1;}',
+            '.moretabs-drawer-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 16px;border:0;background:transparent;color:inherit;text-decoration:none;font:inherit;cursor:pointer;opacity:.85;text-align:left;border-radius:8px;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
+            '.moretabs-drawer-btn.is-active,.moretabs-drawer-btn:hover{opacity:1;background-color:rgba(255,255,255,.08);background-color:color-mix(in srgb,currentColor 8%,transparent);}',
             '.moretabs-drawer-divider{display:flex;align-items:center;justify-content:center;padding:4px 0;opacity:.35;pointer-events:none;user-select:none;cursor:default;}'
         ].join('');
         document.head.appendChild(style);
@@ -115,21 +119,93 @@
         return overlay;
     }
 
+    function tabKey(tab) {
+        return tab && (tab.Id || tab.id) || '';
+    }
+
+    function tabTitle(tab) {
+        return tab && (tab.Title || tab.title) || 'MoreTabs';
+    }
+
+    function hashForTab(tab) {
+        return '#/home?' + QUERY_KEY + '=' + encodeURIComponent(tabKey(tab));
+    }
+
     function currentTabId() {
         var hash = window.location.hash || '';
         if (hash.indexOf(HASH_PREFIX) === 0) {
-            return decodeURIComponent(hash.slice(HASH_PREFIX.length).split('?')[0]);
+            return decodeURIComponent(hash.slice(HASH_PREFIX.length).split(/[?#]/)[0]);
         }
-        return '';
+        var qIndex = hash.indexOf('?');
+        if (qIndex < 0) {
+            return '';
+        }
+        try {
+            return new URLSearchParams(hash.slice(qIndex + 1)).get(QUERY_KEY) || '';
+        } catch (e) {
+            return '';
+        }
     }
 
     function findTab(id) {
         for (var i = 0; i < state.tabs.length; i++) {
-            if (state.tabs[i].Id === id) {
+            if (tabKey(state.tabs[i]) === id) {
                 return state.tabs[i];
             }
         }
         return null;
+    }
+
+    function serverName() {
+        try {
+            if (window.ApiClient && window.ApiClient.serverName) {
+                var name = window.ApiClient.serverName();
+                if (name) {
+                    return name;
+                }
+            }
+            if (window.ApiClient && window.ApiClient.serverInfo) {
+                var info = window.ApiClient.serverInfo();
+                if (info && info.ServerName) {
+                    return info.ServerName;
+                }
+            }
+        } catch (e) {
+        }
+        return '';
+    }
+
+    function desiredTitle(tab) {
+        var name = serverName();
+        var title = tabTitle(tab);
+        return name ? title + ' - ' + name : title;
+    }
+
+    function applyDocumentTitle(tab) {
+        var wanted = desiredTitle(tab);
+        if (document.title !== wanted) {
+            document.title = wanted;
+        }
+    }
+
+    function stopTitleWatch() {
+        if (state.titleTimer) {
+            window.clearInterval(state.titleTimer);
+            state.titleTimer = 0;
+        }
+    }
+
+    function startTitleWatch(tab) {
+        stopTitleWatch();
+        applyDocumentTitle(tab);
+        state.titleTimer = window.setInterval(function () {
+            var overlay = document.getElementById(OVERLAY_ID);
+            if (!overlay || !overlay.classList.contains('is-open')) {
+                stopTitleWatch();
+                return;
+            }
+            applyDocumentTitle(tab);
+        }, 400);
     }
 
     function setActive(id) {
@@ -152,6 +228,7 @@
             }
         }
         setActive('');
+        stopTitleWatch();
     }
 
     function showOverlay(tab) {
@@ -159,15 +236,17 @@
         var overlay = ensureOverlay();
         overlay.style.top = appBarBottom() + 'px';
         var frame = document.getElementById(FRAME_ID);
-        if (frame.getAttribute('src') !== tab.Url) {
-            frame.setAttribute('src', tab.Url);
+        var url = tab.Url || tab.url || '';
+        if (frame.getAttribute('src') !== url) {
+            frame.setAttribute('src', url);
         }
         overlay.classList.add('is-open');
-        setActive(tab.Id);
+        setActive(tabKey(tab));
+        startTitleWatch(tab);
     }
 
     function openTab(tab) {
-        var next = HASH_PREFIX + encodeURIComponent(tab.Id);
+        var next = hashForTab(tab);
         if (window.location.hash !== next) {
             window.location.hash = next;
         } else {
@@ -176,6 +255,15 @@
     }
 
     function syncFromHash() {
+        var hash = window.location.hash || '';
+        if (hash.indexOf(HASH_PREFIX) === 0) {
+            var legacyId = decodeURIComponent(hash.slice(HASH_PREFIX.length).split(/[?#]/)[0]);
+            var legacyTab = findTab(legacyId);
+            if (legacyTab) {
+                window.location.hash = hashForTab(legacyTab);
+                return;
+            }
+        }
         var id = currentTabId();
         if (!id) {
             hideOverlay();
@@ -214,26 +302,43 @@
         return icon;
     }
 
+    function nativeHeaderButtonClass() {
+        var host = findHeaderHost();
+        if (host) {
+            var links = host.querySelectorAll('a.MuiButton-root,button.MuiButton-root,a,button');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].hasAttribute(NAV_ATTR)) {
+                    continue;
+                }
+                var className = String(links[i].className || '');
+                if (className.indexOf('MuiButton') !== -1) {
+                    return className + ' moretabs-nav-btn';
+                }
+            }
+        }
+        return 'moretabs-nav-btn';
+    }
+
     function createHeaderItem(tab) {
         if (isDivider(tab)) {
             var divider = document.createElement('span');
             divider.className = 'moretabs-divider';
-            divider.setAttribute(NAV_ATTR, tab.Id);
+            divider.setAttribute(NAV_ATTR, tabKey(tab));
             divider.setAttribute('aria-hidden', 'true');
             divider.textContent = '|';
             return divider;
         }
         var a = document.createElement('a');
-        a.className = 'moretabs-nav-btn';
-        a.setAttribute(NAV_ATTR, tab.Id);
-        a.href = HASH_PREFIX + encodeURIComponent(tab.Id);
-        a.title = tab.Title;
-        var icon = createIcon(tab.Icon);
+        a.className = nativeHeaderButtonClass();
+        a.setAttribute(NAV_ATTR, tabKey(tab));
+        a.href = hashForTab(tab);
+        a.title = tabTitle(tab);
+        var icon = createIcon(tab.Icon || tab.icon);
         if (icon) {
             a.appendChild(icon);
         }
         var label = document.createElement('span');
-        label.textContent = tab.Title;
+        label.textContent = tabTitle(tab);
         a.appendChild(label);
         a.addEventListener('click', function (event) {
             event.preventDefault();
@@ -247,21 +352,21 @@
         if (isDivider(tab)) {
             var divider = document.createElement('span');
             divider.className = 'moretabs-drawer-divider';
-            divider.setAttribute(NAV_ATTR, tab.Id);
+            divider.setAttribute(NAV_ATTR, tabKey(tab));
             divider.setAttribute('aria-hidden', 'true');
             divider.textContent = '|';
             return divider;
         }
         var a = document.createElement('a');
         a.className = 'moretabs-drawer-btn';
-        a.setAttribute(NAV_ATTR, tab.Id);
-        a.href = HASH_PREFIX + encodeURIComponent(tab.Id);
-        var icon = createIcon(tab.Icon);
+        a.setAttribute(NAV_ATTR, tabKey(tab));
+        a.href = hashForTab(tab);
+        var icon = createIcon(tab.Icon || tab.icon);
         if (icon) {
             a.appendChild(icon);
         }
         var label = document.createElement('span');
-        label.textContent = tab.Title;
+        label.textContent = tabTitle(tab);
         a.appendChild(label);
         a.addEventListener('click', function (event) {
             event.preventDefault();
