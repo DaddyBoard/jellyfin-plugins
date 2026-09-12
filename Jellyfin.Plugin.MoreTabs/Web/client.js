@@ -3,7 +3,7 @@
         return;
     }
 
-    var STYLE_ID = 'moretabs-style';
+    var STYLE_ID = 'moretabs-style-v3';
     var OVERLAY_ID = 'moretabs-overlay';
     var FRAME_ID = 'moretabs-frame';
     var NAV_ATTR = 'data-moretabs-id';
@@ -73,6 +73,15 @@
     }
 
     function ensureStyle() {
+        var stale = document.getElementById('moretabs-style');
+        if (stale) {
+            stale.remove();
+        }
+        var root = document.documentElement;
+        root.style.removeProperty('--moretabs-nav-font-size');
+        root.style.removeProperty('--moretabs-nav-font-weight');
+        root.style.removeProperty('--moretabs-nav-line-height');
+        root.style.removeProperty('--moretabs-nav-icon-size');
         if (document.getElementById(STYLE_ID)) {
             return;
         }
@@ -82,12 +91,11 @@
             '#' + OVERLAY_ID + '{position:fixed;left:0;right:0;bottom:0;z-index:1050;background:var(--theme-body-bg,#101010);display:none;}',
             '#' + OVERLAY_ID + '.is-open{display:block;}',
             '#' + FRAME_ID + '{width:100%;height:100%;border:0;background:transparent;}',
-            '.moretabs-nav-btn{display:inline-flex;align-items:center;gap:4px;color:inherit;text-decoration:none;text-transform:none;cursor:pointer;border-radius:8px;font-size:var(--moretabs-nav-font-size,0.875rem);font-weight:var(--moretabs-nav-font-weight,500);line-height:var(--moretabs-nav-line-height,1.75);letter-spacing:0.02857em;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
-            '.moretabs-nav-btn span:not(.material-icons){font-size:inherit;font-weight:inherit;line-height:inherit;}',
-            '.moretabs-nav-btn:not(.MuiButton-root){min-height:auto;padding:6px 8px;margin:0;border:0;background:transparent;opacity:.72;}',
+            '.moretabs-nav-btn{text-decoration:none;}',
+            '.moretabs-nav-btn:not(.MuiButton-root){display:inline-flex;align-items:center;gap:4px;min-height:auto;padding:6px 8px;margin:0;border:0;background:transparent;color:inherit;font-size:0.875rem;font-weight:500;line-height:1.75;text-transform:none;cursor:pointer;border-radius:8px;opacity:.72;}',
             '.moretabs-nav-btn:not(.MuiButton-root):hover,.moretabs-nav-btn:not(.MuiButton-root).is-active{opacity:1;background-color:rgba(255,255,255,.08);background-color:color-mix(in srgb,currentColor 8%,transparent);}',
             '.moretabs-nav-btn.MuiButton-root:hover,.moretabs-nav-btn.MuiButton-root.is-active{background-color:var(--mui-palette-action-hover,rgba(255,255,255,.08));}',
-            '.moretabs-nav-btn .material-icons{font-size:var(--moretabs-nav-icon-size,1.125rem);width:var(--moretabs-nav-icon-size,1.125rem);height:var(--moretabs-nav-icon-size,1.125rem);line-height:1;}',
+            '.moretabs-nav-btn .material-icons{font-size:20px;width:20px;height:20px;line-height:1;}',
             '.moretabs-divider{display:inline-flex;align-items:center;padding:0 6px;margin:0 2px;opacity:.4;pointer-events:none;user-select:none;line-height:1;cursor:default;}',
             '.moretabs-drawer-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 16px;border:0;background:transparent;color:inherit;text-decoration:none;font:inherit;cursor:pointer;opacity:.85;text-align:left;border-radius:8px;transition:background-color 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);}',
             '.moretabs-drawer-btn.is-active,.moretabs-drawer-btn:hover{opacity:1;background-color:rgba(255,255,255,.08);background-color:color-mix(in srgb,currentColor 8%,transparent);}',
@@ -303,21 +311,34 @@
         return icon;
     }
 
-    function nativeHeaderButtonClass() {
-        var host = findHeaderHost();
-        if (host) {
-            var links = host.querySelectorAll('a.MuiButton-root,button.MuiButton-root,a,button');
-            for (var i = 0; i < links.length; i++) {
-                if (links[i].hasAttribute(NAV_ATTR)) {
-                    continue;
-                }
-                var className = String(links[i].className || '');
-                if (className.indexOf('MuiButton') !== -1) {
-                    return className + ' moretabs-nav-btn';
-                }
+    function nativeHeaderButton(host) {
+        if (!host) {
+            return null;
+        }
+        var links = host.querySelectorAll('a.MuiButton-root,button.MuiButton-root');
+        for (var i = 0; i < links.length; i++) {
+            if (!links[i].hasAttribute(NAV_ATTR)) {
+                return links[i];
             }
         }
-        return 'moretabs-nav-btn';
+        return null;
+    }
+
+    function copyNativeType(native, target) {
+        if (!native) {
+            return;
+        }
+        var cs = window.getComputedStyle(native);
+        target.style.fontSize = cs.fontSize;
+        target.style.fontWeight = cs.fontWeight;
+        target.style.lineHeight = cs.lineHeight;
+        target.style.letterSpacing = cs.letterSpacing;
+        target.style.paddingTop = cs.paddingTop;
+        target.style.paddingRight = cs.paddingRight;
+        target.style.paddingBottom = cs.paddingBottom;
+        target.style.paddingLeft = cs.paddingLeft;
+        target.style.minHeight = cs.minHeight;
+        target.style.height = 'auto';
     }
 
     function createHeaderItem(tab) {
@@ -329,18 +350,33 @@
             divider.textContent = '|';
             return divider;
         }
+        var native = nativeHeaderButton(findHeaderHost());
         var a = document.createElement('a');
-        a.className = nativeHeaderButtonClass();
+        a.className = native ? native.className + ' moretabs-nav-btn' : 'moretabs-nav-btn';
         a.setAttribute(NAV_ATTR, tabKey(tab));
         a.href = hashForTab(tab);
         a.title = tabTitle(tab);
-        var icon = createIcon(tab.Icon || tab.icon);
-        if (icon) {
-            a.appendChild(icon);
+        copyNativeType(native, a);
+        var iconName = tab.Icon || tab.icon;
+        if (iconName) {
+            var wrap = document.createElement('span');
+            var nativeIconWrap = native && native.querySelector('.MuiButton-startIcon');
+            wrap.className = nativeIconWrap ? nativeIconWrap.className : 'MuiButton-startIcon MuiButton-iconSizeMedium';
+            var icon = createIcon(iconName);
+            var nativeIcon = native && native.querySelector('.MuiSvgIcon-root, svg, .material-icons');
+            if (nativeIcon && icon) {
+                var iconCs = window.getComputedStyle(nativeIcon);
+                var iconBox = nativeIcon.getBoundingClientRect();
+                var iconPx = iconBox.height > 0 ? Math.round(iconBox.height) + 'px' : (iconCs.fontSize || '20px');
+                icon.style.fontSize = iconPx;
+                icon.style.width = iconPx;
+                icon.style.height = iconPx;
+                icon.style.lineHeight = '1';
+            }
+            wrap.appendChild(icon);
+            a.appendChild(wrap);
         }
-        var label = document.createElement('span');
-        label.textContent = tabTitle(tab);
-        a.appendChild(label);
+        a.appendChild(document.createTextNode(tabTitle(tab)));
         a.addEventListener('click', function (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -411,48 +447,11 @@
         return null;
     }
 
-    function applyNativeNavMetrics(host) {
-        var native = null;
-        var links = host.querySelectorAll('a.MuiButton-root,button.MuiButton-root,a,button');
-        for (var i = 0; i < links.length; i++) {
-            if (links[i].hasAttribute(NAV_ATTR)) {
-                continue;
-            }
-            if (String(links[i].className || '').indexOf('MuiButton') !== -1) {
-                native = links[i];
-                break;
-            }
-        }
-        if (!native) {
-            return;
-        }
-        var cs = window.getComputedStyle(native);
-        var iconEl = native.querySelector('svg, .MuiSvgIcon-root, .material-icons');
-        var iconSize = '1.125rem';
-        if (iconEl) {
-            var iconBox = iconEl.getBoundingClientRect();
-            if (iconBox.height > 0) {
-                iconSize = Math.round(iconBox.height) + 'px';
-            } else {
-                var iconCs = window.getComputedStyle(iconEl);
-                if (iconCs.fontSize) {
-                    iconSize = iconCs.fontSize;
-                }
-            }
-        }
-        var root = document.documentElement;
-        root.style.setProperty('--moretabs-nav-font-size', cs.fontSize || '0.875rem');
-        root.style.setProperty('--moretabs-nav-font-weight', cs.fontWeight || '500');
-        root.style.setProperty('--moretabs-nav-line-height', cs.lineHeight || '1.75');
-        root.style.setProperty('--moretabs-nav-icon-size', iconSize);
-    }
-
     function injectHeader() {
         var host = findHeaderHost();
         if (!host) {
             return false;
         }
-        applyNativeNavMetrics(host);
         var existing = host.querySelectorAll('[' + NAV_ATTR + ']');
         if (existing.length === state.tabs.length) {
             return true;
