@@ -82,13 +82,20 @@ export default function (view) {
         }).then(function (response) {
             return response.json();
         }).then(function (info) {
-            if (info.fileTransformationRegistered) {
-                status.textContent = 'File Transformation is loaded and MoreTabs is registered.';
-            } else if (info.fileTransformationLoaded) {
-                status.textContent = 'File Transformation is loaded, but MoreTabs has not registered yet. Restart Jellyfin if this stays.';
+            var parts = [];
+            if (info.injectionLastApplied) {
+                parts.push('Web client script injection is working.');
+            } else if (info.injectionLastPath) {
+                parts.push('Jellyfin saw ' + info.injectionLastPath + ' but did not inject (' + (info.injectionLastSkipReason || 'unknown') + '). Hard-refresh Home.');
             } else {
-                status.textContent = 'File Transformation is not loaded. Install File Transformation 3.0+ and restart. MoreTabs can still inject itself as a fallback.';
+                parts.push('Open Home once after a hard refresh so MoreTabs can inject into index.html.');
             }
+            if (info.fileTransformationRegistered) {
+                parts.push('File Transformation is also registered.');
+            } else if (info.fileTransformationLoaded) {
+                parts.push('File Transformation is loaded but not registered' + (info.lastError ? ': ' + info.lastError : '.'));
+            }
+            status.textContent = parts.join(' ');
         }).catch(function () {
             status.textContent = 'Could not read MoreTabs status.';
         });
@@ -144,7 +151,24 @@ export default function (view) {
         }
     }
 
+    function ensureClient() {
+        if (window.MoreTabs) {
+            return;
+        }
+        if (document.querySelector('script[src*="MoreTabs/client.js"]')) {
+            return;
+        }
+        if (!window.ApiClient || !window.ApiClient.getUrl) {
+            return;
+        }
+        var script = document.createElement('script');
+        script.src = window.ApiClient.getUrl('MoreTabs/client.js');
+        script.defer = true;
+        document.head.appendChild(script);
+    }
+
     function start() {
+        ensureClient();
         if (started) {
             load();
             return;

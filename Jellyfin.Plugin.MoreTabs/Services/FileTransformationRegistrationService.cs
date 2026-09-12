@@ -6,7 +6,6 @@ using System.Runtime.Loader;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Plugin.MoreTabs.Helpers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +14,7 @@ namespace Jellyfin.Plugin.MoreTabs.Services;
 public class FileTransformationRegistrationService : IHostedService
 {
     public static readonly Guid TransformationId = Guid.Parse("6e1b0c4a-2f8d-4a91-9c3e-7d5b1a8e4f02");
+    public static readonly Guid TransformationRegexId = Guid.Parse("6e1b0c4a-2f8d-4a91-9c3e-7d5b1a8e4f03");
 
     private readonly ILogger<FileTransformationRegistrationService> _logger;
 
@@ -53,7 +53,9 @@ public class FileTransformationRegistrationService : IHostedService
         try
         {
             Type? pluginInterfaceType = FindAssembly()?.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
-            pluginInterfaceType?.GetMethod("RemoveTransformation")?.Invoke(null, new object?[] { TransformationId });
+            MethodInfo? remove = pluginInterfaceType?.GetMethod("RemoveTransformation");
+            remove?.Invoke(null, new object?[] { TransformationId });
+            remove?.Invoke(null, new object?[] { TransformationRegexId });
         }
         catch (Exception ex)
         {
@@ -90,18 +92,20 @@ public class FileTransformationRegistrationService : IHostedService
                 return false;
             }
 
-            object? payload = CreatePayload(fileTransformationAssembly);
-            if (payload is null)
+            object? exact = CreatePayload(fileTransformationAssembly, TransformationId, "index.html");
+            object? regex = CreatePayload(fileTransformationAssembly, TransformationRegexId, @"index\.html$");
+            if (exact is null || regex is null)
             {
                 LastError = "Could not construct a File Transformation JObject payload";
                 _logger.LogWarning("MoreTabs: {Error}", LastError);
                 return false;
             }
 
-            register.Invoke(null, new object?[] { payload });
+            register.Invoke(null, new object?[] { exact });
+            register.Invoke(null, new object?[] { regex });
             IsRegistered = true;
             LastError = null;
-            _logger.LogInformation("MoreTabs registered index.html with File Transformation 3.0");
+            _logger.LogInformation("MoreTabs registered index.html with File Transformation 3.0 via HTTP callback");
             return true;
         }
         catch (Exception ex)
@@ -112,7 +116,7 @@ public class FileTransformationRegistrationService : IHostedService
         }
     }
 
-    private static object? CreatePayload(Assembly fileTransformationAssembly)
+    private static object? CreatePayload(Assembly fileTransformationAssembly, Guid id, string fileNamePattern)
     {
         Assembly? newtonsoft = FindNewtonsoft(fileTransformationAssembly);
         Type? jObjectType = newtonsoft?.GetType("Newtonsoft.Json.Linq.JObject");
@@ -124,11 +128,9 @@ public class FileTransformationRegistrationService : IHostedService
 
         Dictionary<string, string> values = new Dictionary<string, string>
         {
-            ["id"] = TransformationId.ToString(),
-            ["fileNamePattern"] = @"index\.html$",
-            ["callbackAssembly"] = typeof(TransformationPatches).Assembly.FullName ?? string.Empty,
-            ["callbackClass"] = typeof(TransformationPatches).FullName ?? string.Empty,
-            ["callbackMethod"] = nameof(TransformationPatches.IndexHtml)
+            ["id"] = id.ToString(),
+            ["fileNamePattern"] = fileNamePattern,
+            ["transformationEndpoint"] = "/MoreTabs/TransformIndexHtml"
         };
 
         return parse.Invoke(null, [JsonSerializer.Serialize(values)]);

@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Jellyfin.Plugin.MoreTabs.Configuration;
+using Jellyfin.Plugin.MoreTabs.Helpers;
+using Jellyfin.Plugin.MoreTabs.Models;
 using Jellyfin.Plugin.MoreTabs.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +30,15 @@ public class MoreTabsController : ControllerBase
         return File(stream, "application/javascript");
     }
 
+    [HttpPost("TransformIndexHtml")]
+    [AllowAnonymous]
+    public ContentResult TransformIndexHtml([FromBody] PatchRequestPayload? payload)
+    {
+        string version = global::Jellyfin.Plugin.MoreTabs.Plugin.Instance?.Version.ToString() ?? "1";
+        string html = IndexHtmlPatch.Apply(payload?.Contents ?? string.Empty, "../MoreTabs/client.js?v=" + version);
+        return Content(html, "text/html; charset=utf-8");
+    }
+
     [HttpGet("Config")]
     [Authorize]
     public ActionResult<IEnumerable<TabConfig>> GetConfig()
@@ -45,7 +56,11 @@ public class MoreTabsController : ControllerBase
             fileTransformationLoaded = FileTransformationRegistrationService.IsAssemblyLoaded(),
             fileTransformationRegistered = FileTransformationRegistrationService.IsRegistered,
             lastError = FileTransformationRegistrationService.LastError,
-            tabCount = global::Jellyfin.Plugin.MoreTabs.Plugin.Instance?.Configuration.Tabs.Count ?? 0
+            tabCount = global::Jellyfin.Plugin.MoreTabs.Plugin.Instance?.Configuration.Tabs.Count ?? 0,
+            injectionLastPath = ScriptInjectionStartupFilter.LastPath,
+            injectionLastHtmlLength = ScriptInjectionStartupFilter.LastHtmlLength,
+            injectionLastApplied = ScriptInjectionStartupFilter.LastApplied,
+            injectionLastSkipReason = ScriptInjectionStartupFilter.LastSkipReason
         });
     }
 }
