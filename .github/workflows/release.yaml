@@ -50,7 +50,7 @@ jobs:
             VERSION="$(python3 .github/scripts/next-version.py manifest.json)"
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=MoreTabs-v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publish plugin
         run: >
@@ -85,11 +85,7 @@ jobs:
           CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
         run: |
           ZIP="MoreTabs_${VERSION}.zip"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP" --clobber
-          else
-            gh release create "$TAG" "$ZIP" --title "MoreTabs $VERSION" --notes "$CHANGELOG"
-          fi
+          gh release create "$TAG" "$ZIP" --title "MoreTabs $VERSION" --notes "$CHANGELOG"
 
       - name: Update manifest
         env:
