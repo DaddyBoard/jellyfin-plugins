@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       plugin:
-        description: Plugin to release (name or "all")
+        description: Plugin slug to release (e.g. "MoreTabs", "SonarrPlaceholder", "all", or "changed")
         required: false
         default: "changed"
       version:
@@ -48,30 +48,28 @@ jobs:
           INPUT_PLUGIN: ${{ inputs.plugin }}
         run: |
           if [ "$INPUT_PLUGIN" = "all" ]; then
-            PLUGINS=$(python3 .github/scripts/discover-plugins.py --json)
+            PLUGINS=$(python3 .github/scripts/discover-plugins.py --json | jq -c .)
           elif [ -n "$INPUT_PLUGIN" ] && [ "$INPUT_PLUGIN" != "changed" ]; then
-            PLUGINS=$(python3 .github/scripts/discover-plugins.py --json | jq --arg name "$INPUT_PLUGIN" '[.[] | select(.name == $name)]')
+            PLUGINS=$(python3 .github/scripts/discover-plugins.py --json | jq -c --arg slug "$INPUT_PLUGIN" '[.[] | select(.slug == $slug)]')
           else
-            PLUGINS=$(python3 .github/scripts/detect-changed-plugins.py)
+            PLUGINS=$(python3 .github/scripts/detect-changed-plugins.py | jq -c .)
           fi
           echo "matrix=$PLUGINS" >> "$GITHUB_OUTPUT"
           echo "Detected plugins to release:"
           echo "$PLUGINS" | jq -r '.[].name // empty'
 
-  release:
+  build:
     needs: detect-plugins
     if: needs.detect-plugins.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         plugin: ${{ fromJson(needs.detect-plugins.outputs.matrix) }}
-      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -93,7 +91,7 @@ jobs:
             VERSION="$(python3 .github/scripts/next-version.py manifest.json "$PLUGIN_GUID")"
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=${{ matrix.plugin.name }}-v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ matrix.plugin.slug }}-v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publish plugin
         env:
@@ -109,56 +107,106 @@ jobs:
 
       - name: Package zip
         env:
-          PLUGIN_NAME: ${{ matrix.plugin.name }}
+          PLUGIN_SLUG: ${{ matrix.plugin.slug }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
+          ZIP_NAME="${PLUGIN_SLUG}_${VERSION}.zip"
           python3 - <<'PY'
           import os
           import zipfile
           from pathlib import Path
-          plugin_name = os.environ["PLUGIN_NAME"]
-          version = os.environ["VERSION"]
-          zip_name = f"{plugin_name}_{version}.zip"
+          zip_name = os.environ["ZIP_NAME"]
           with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as archive:
               for path in Path("publish").glob("*.dll"):
                   archive.write(path, path.name)
-          print(zip_name)
+          print(f"Created {zip_name}")
           PY
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLUGIN_NAME: ${{ matrix.plugin.name }}
+          PLUGIN_SLUG: ${{ matrix.plugin.slug }}
           VERSION: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
           CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
         run: |
-          ZIP="${PLUGIN_NAME}_${VERSION}.zip"
+          ZIP="${PLUGIN_SLUG}_${VERSION}.zip"
           gh release create "$TAG" "$ZIP" --title "$PLUGIN_NAME $VERSION" --notes "$CHANGELOG"
 
-      - name: Update manifest
+      - name: Prepare manifest metadata
         env:
+          PLUGIN_SLUG: ${{ matrix.plugin.slug }}
           PLUGIN_NAME: ${{ matrix.plugin.name }}
           PLUGIN_GUID: ${{ matrix.plugin.guid }}
           VERSION: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
-          CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
           REPO: ${{ github.repository }}
           PLUGIN_METADATA: ${{ toJson(matrix.plugin) }}
         run: |
-          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PLUGIN_NAME}_${VERSION}.zip"
-          python3 .github/scripts/update-manifest.py \
-            "${PLUGIN_NAME}_${VERSION}.zip" \
-            "$VERSION" \
-            "$SOURCE_URL" \
-            "$PLUGIN_GUID" \
-            "$PLUGIN_NAME" \
-            "$PLUGIN_METADATA"
+          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PLUGIN_SLUG}_${VERSION}.zip"
+          mkdir -p manifest-updates
+          cat > "manifest-updates/${PLUGIN_SLUG}.json" <<EOF
+          {
+            "zip": "${PLUGIN_SLUG}_${VERSION}.zip",
+            "version": "$VERSION",
+            "sourceUrl": "$SOURCE_URL",
+            "guid": "$PLUGIN_GUID",
+            "name": "$PLUGIN_NAME",
+            "metadata": $PLUGIN_METADATA
+          }
+          EOF
+
+      - name: Upload manifest metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-${{ matrix.plugin.slug }}
+          path: manifest-updates/${{ matrix.plugin.slug }}.json
+
+  update-manifest:
+    needs: [detect-plugins, build]
+    if: needs.detect-plugins.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install PyYAML
+        run: pip install PyYAML
+
+      - name: Download all manifest metadata
+        uses: actions/download-artifact@v4
+        with:
+          pattern: manifest-*
+          path: manifest-updates
+
+      - name: Update manifest for all plugins
+        env:
+          CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
+        run: |
+          for metadata_file in manifest-updates/manifest-*/*.json; do
+            ZIP=$(jq -r '.zip' "$metadata_file")
+            VERSION=$(jq -r '.version' "$metadata_file")
+            SOURCE_URL=$(jq -r '.sourceUrl' "$metadata_file")
+            GUID=$(jq -r '.guid' "$metadata_file")
+            NAME=$(jq -r '.name' "$metadata_file")
+            METADATA=$(jq -c '.metadata' "$metadata_file")
+            
+            echo "Updating manifest for $NAME ($VERSION)"
+            
+            python3 .github/scripts/update-manifest.py \
+              "$ZIP" \
+              "$VERSION" \
+              "$SOURCE_URL" \
+              "$GUID" \
+              "$NAME" \
+              "$METADATA"
+          done
 
       - name: Commit manifest
-        env:
-          PLUGIN_NAME: ${{ matrix.plugin.name }}
-          VERSION: ${{ steps.version.outputs.value }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -167,6 +215,14 @@ jobs:
             echo "No manifest changes"
             exit 0
           fi
-          git pull --rebase
-          git commit -m "chore: publish $PLUGIN_NAME $VERSION"
+          
+          PLUGINS=$(ls manifest-updates/manifest-*/*.json | wc -l)
+          if [ "$PLUGINS" -eq 1 ]; then
+            NAME=$(jq -r '.name' manifest-updates/manifest-*/*.json)
+            VERSION=$(jq -r '.version' manifest-updates/manifest-*/*.json)
+            git commit -m "chore: publish $NAME $VERSION"
+          else
+            git commit -m "chore: publish $PLUGINS plugins"
+          fi
+          
           git push
