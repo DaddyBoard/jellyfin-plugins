@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import hashlib
 import json
 import os
 import sys
@@ -8,21 +7,20 @@ from pathlib import Path
 
 
 def main():
-    if len(sys.argv) < 7:
-        print("Usage: update-manifest.py <zip> <version> <source_url> <plugin_guid> <plugin_name> <plugin_metadata_json>", file=sys.stderr)
+    if len(sys.argv) < 8:
+        print("Usage: update-manifest.py <zip> <version> <source_url> <plugin_guid> <plugin_name> <checksum> <plugin_metadata_json>", file=sys.stderr)
         sys.exit(1)
     
-    zip_path = Path(sys.argv[1])
+    zip_name = sys.argv[1]
     version = sys.argv[2]
     source_url = sys.argv[3]
     plugin_guid = sys.argv[4]
     plugin_name = sys.argv[5]
-    plugin_metadata = json.loads(sys.argv[6])
+    checksum = sys.argv[6]
+    plugin_metadata = json.loads(sys.argv[7])
     
     changelog = os.environ.get("CHANGELOG") or "Automated release"
     manifest_path = Path("manifest.json")
-    
-    checksum = hashlib.md5(zip_path.read_bytes()).hexdigest()
     
     version_entry = {
         "checksum": checksum,

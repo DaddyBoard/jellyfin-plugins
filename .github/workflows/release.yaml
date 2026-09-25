@@ -110,16 +110,22 @@ jobs:
           PLUGIN_SLUG: ${{ matrix.plugin.slug }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          ZIP_NAME="${PLUGIN_SLUG}_${VERSION}.zip"
           python3 - <<'PY'
           import os
           import zipfile
+          import hashlib
           from pathlib import Path
-          zip_name = os.environ["ZIP_NAME"]
+          plugin_slug = os.environ["PLUGIN_SLUG"]
+          version = os.environ["VERSION"]
+          zip_name = f"{plugin_slug}_{version}.zip"
           with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as archive:
               for path in Path("publish").glob("*.dll"):
                   archive.write(path, path.name)
+          checksum = hashlib.md5(Path(zip_name).read_bytes()).hexdigest()
           print(f"Created {zip_name}")
+          print(f"Checksum: {checksum}")
+          with open("checksum.txt", "w") as f:
+              f.write(checksum)
           PY
 
       - name: Publish GitHub release
@@ -145,17 +151,23 @@ jobs:
           PLUGIN_METADATA: ${{ toJson(matrix.plugin) }}
         run: |
           SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PLUGIN_SLUG}_${VERSION}.zip"
+          CHECKSUM=$(cat checksum.txt)
           mkdir -p manifest-updates
-          cat > "manifest-updates/${PLUGIN_SLUG}.json" <<EOF
-          {
-            "zip": "${PLUGIN_SLUG}_${VERSION}.zip",
-            "version": "$VERSION",
-            "sourceUrl": "$SOURCE_URL",
-            "guid": "$PLUGIN_GUID",
-            "name": "$PLUGIN_NAME",
-            "metadata": $PLUGIN_METADATA
+          python3 - <<'PY'
+          import os
+          import json
+          data = {
+              "zip": f"{os.environ['PLUGIN_SLUG']}_{os.environ['VERSION']}.zip",
+              "version": os.environ["VERSION"],
+              "sourceUrl": os.environ["SOURCE_URL"],
+              "guid": os.environ["PLUGIN_GUID"],
+              "name": os.environ["PLUGIN_NAME"],
+              "checksum": os.environ["CHECKSUM"],
+              "metadata": json.loads(os.environ["PLUGIN_METADATA"])
           }
-          EOF
+          with open(f"manifest-updates/{os.environ['PLUGIN_SLUG']}.json", "w") as f:
+              json.dump(data, f, indent=2)
+          PY
 
       - name: Upload manifest metadata
         uses: actions/upload-artifact@v4
@@ -193,9 +205,10 @@ jobs:
             SOURCE_URL=$(jq -r '.sourceUrl' "$metadata_file")
             GUID=$(jq -r '.guid' "$metadata_file")
             NAME=$(jq -r '.name' "$metadata_file")
+            CHECKSUM=$(jq -r '.checksum' "$metadata_file")
             METADATA=$(jq -c '.metadata' "$metadata_file")
             
-            echo "Updating manifest for $NAME ($VERSION)"
+            echo "Updating manifest for $NAME ($VERSION) with checksum $CHECKSUM"
             
             python3 .github/scripts/update-manifest.py \
               "$ZIP" \
@@ -203,6 +216,7 @@ jobs:
               "$SOURCE_URL" \
               "$GUID" \
               "$NAME" \
+              "$CHECKSUM" \
               "$METADATA"
           done
 
