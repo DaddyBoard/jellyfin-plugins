@@ -20,8 +20,11 @@ def main():
         with open(build_yaml, "r", encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
         
+        slug = plugin_dir.name.replace("Jellyfin.Plugin.", "")
+        
         plugins.append({
             "name": metadata.get("name"),
+            "slug": slug,
             "guid": metadata.get("guid"),
             "folder": str(plugin_dir),
             "csproj": str(plugin_dir / f"{plugin_dir.name}.csproj"),
@@ -33,7 +36,7 @@ def main():
         })
     
     if "--json" in sys.argv:
-        print(json.dumps(plugins, indent=2))
+        print(json.dumps(plugins, separators=(',', ':')))
     else:
         for plugin in plugins:
             print(plugin["name"])

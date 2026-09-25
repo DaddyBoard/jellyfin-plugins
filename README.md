@@ -37,13 +37,55 @@ https://raw.githubusercontent.com/DaddyBoard/jellyfin-plugins/main/manifest.json
 3. Configure via **Dashboard → Plugins → [Plugin Name]**
 4. Hard-refresh the web client (`Ctrl+F5`)
 
-Push to `main` builds a new zip, creates a GitHub Release, and updates that manifest automatically.
+## Releasing
+
+### Auto-Release
+Push to `main` automatically releases plugins with changed files:
+- Detects which plugins have modifications via git diff
+- Builds each changed plugin independently
+- Creates GitHub release with tag `<PluginSlug>-v<version>` (e.g., `SonarrPlaceholder-v1.0.0.0`)
+- Updates `manifest.json` with new version
+- Version is auto-incremented from manifest
+
+### Manual Release
+Manually trigger a release via workflow dispatch:
+
+```bash
+# Release specific plugin (use slug, not display name)
+gh workflow run release.yaml -f plugin="MoreTabs"
+gh workflow run release.yaml -f plugin="SonarrPlaceholder"
+
+# Release all plugins
+gh workflow run release.yaml -f plugin="all"
+
+# Custom version
+gh workflow run release.yaml -f plugin="MoreTabs" -f version="2.0.0.0"
+```
+
+### Adding a New Plugin
+1. Create `Jellyfin.Plugin.YourName/` folder
+2. Add `build.yaml` with metadata:
+   ```yaml
+   name: "Display Name"
+   guid: "<unique-uuid>"  # Use uuidgen or Python uuid.uuid4()
+   version: "1.0.0.0"
+   targetAbi: "12.0.0.0"
+   framework: "net10.0"
+   overview: "Short description"
+   description: "Longer description"
+   category: "General"
+   owner: "DaddyBoard"
+   artifacts:
+   - "Jellyfin.Plugin.YourName.dll"
+   ```
+3. Implement plugin following Jellyfin conventions
+4. Push to main - auto-releases on first push
 
 ## Manual build
 
-```powershell
-dotnet publish "Jellyfin.Plugin.MoreTabs\Jellyfin.Plugin.MoreTabs.csproj" -c Release
-dotnet publish "Jellyfin.Plugin.SonarrPlaceholder\Jellyfin.Plugin.SonarrPlaceholder.csproj" -c Release
+```bash
+dotnet publish Jellyfin.Plugin.MoreTabs/Jellyfin.Plugin.MoreTabs.csproj -c Release
+dotnet publish Jellyfin.Plugin.SonarrPlaceholder/Jellyfin.Plugin.SonarrPlaceholder.csproj -c Release
 ```
 
 Copy the `.dll` files into `/config/plugins/[PluginName]_[Version]/`.

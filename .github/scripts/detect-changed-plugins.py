@@ -44,8 +44,11 @@ def main():
         with open(build_yaml, "r", encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
         
+        slug = plugin_dir.name.replace("Jellyfin.Plugin.", "")
+        
         plugins_info.append({
             "name": metadata.get("name"),
+            "slug": slug,
             "guid": metadata.get("guid"),
             "folder": str(plugin_dir),
             "csproj": str(plugin_dir / f"{plugin_dir.name}.csproj"),
@@ -56,7 +59,7 @@ def main():
             "targetAbi": metadata.get("targetAbi", "12.0.0.0"),
         })
     
-    print(json.dumps(plugins_info, indent=2))
+    print(json.dumps(plugins_info, separators=(',', ':')))
 
 
 if __name__ == "__main__":
