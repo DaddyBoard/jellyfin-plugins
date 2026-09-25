@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "checksum": "d1a4815637c7825f1419f50e11c9436c",
+        "changelog": "Merge pull request #4 from DaddyBoard/cursor/sonarr-placeholder-plugin-3beb\n\nAdd Sonarr Placeholder Plugin - Show Missing Episodes",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/MoreTabs-v1.0.0.12/MoreTabs_1.0.0.12.zip",
+        "timestamp": "2026-09-25T13:23:37Z",
+        "version": "1.0.0.12"
+      },
+      {
         "checksum": "e9c0a4898348ea7dcf3f6739e0041b1c",
         "changelog": "Update client.js",
         "targetAbi": "12.0.0.0",
