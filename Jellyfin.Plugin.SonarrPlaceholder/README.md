@@ -2,11 +2,11 @@
 
 Jellyfin 12 plugin that displays greyed-out placeholder episode cards for episodes tracked by Sonarr but not yet downloaded or aired.
 
-## Problem
+## Problem:
 
 When a user requests a show that is still airing weekly, Jellyfin only shows the episodes actually on disk (e.g. 1 season with 1 episode), making it look incomplete.
 
-## Solution
+## Solution:
 
 This plugin integrates with Sonarr to show:
 - **Unaired episodes** - with countdown timers (e.g. "3d 4h") until air date
