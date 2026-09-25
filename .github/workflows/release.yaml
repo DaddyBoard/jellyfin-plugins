@@ -9,8 +9,12 @@ on:
       - "manifest.json"
   workflow_dispatch:
     inputs:
+      plugin:
+        description: Plugin to release (name or "all")
+        required: false
+        default: "changed"
       version:
-        description: Plugin version such as 1.0.0.0
+        description: Plugin version such as 1.0.0.0 (optional)
         required: false
       changelog:
         description: Changelog shown in Jellyfin
@@ -18,15 +22,50 @@ on:
         default: Automated release
 
 concurrency:
-  group: moretabs-release
+  group: plugin-release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  detect-plugins:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install PyYAML
+        run: pip install PyYAML
+
+      - name: Detect plugins to release
+        id: detect
+        env:
+          INPUT_PLUGIN: ${{ inputs.plugin }}
+        run: |
+          if [ "$INPUT_PLUGIN" = "all" ]; then
+            PLUGINS=$(python3 .github/scripts/discover-plugins.py --json)
+          elif [ -n "$INPUT_PLUGIN" ] && [ "$INPUT_PLUGIN" != "changed" ]; then
+            PLUGINS=$(python3 .github/scripts/discover-plugins.py --json | jq --arg name "$INPUT_PLUGIN" '[.[] | select(.name == $name)]')
+          else
+            PLUGINS=$(python3 .github/scripts/detect-changed-plugins.py)
+          fi
+          echo "matrix=$PLUGINS" >> "$GITHUB_OUTPUT"
+          echo "Detected plugins to release:"
+          echo "$PLUGINS" | jq -r '.[].name // empty'
+
+  release:
+    needs: detect-plugins
+    if: needs.detect-plugins.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        plugin: ${{ fromJson(needs.detect-plugins.outputs.matrix) }}
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,38 +78,47 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Install PyYAML
+        run: pip install PyYAML
+
       - name: Resolve version
         id: version
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          PLUGIN_GUID: ${{ matrix.plugin.guid }}
         run: |
           if [ -n "$INPUT_VERSION" ]; then
             VERSION="$INPUT_VERSION"
           else
-            VERSION="$(python3 .github/scripts/next-version.py manifest.json)"
+            VERSION="$(python3 .github/scripts/next-version.py manifest.json "$PLUGIN_GUID")"
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=MoreTabs-v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ matrix.plugin.name }}-v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publish plugin
+        env:
+          CSPROJ: ${{ matrix.plugin.csproj }}
+          VERSION: ${{ steps.version.outputs.value }}
         run: >
-          dotnet publish Jellyfin.Plugin.MoreTabs/Jellyfin.Plugin.MoreTabs.csproj
+          dotnet publish "$CSPROJ"
           -c Release
           -o publish
-          -p:Version=${{ steps.version.outputs.value }}
-          -p:AssemblyVersion=${{ steps.version.outputs.value }}
-          -p:FileVersion=${{ steps.version.outputs.value }}
+          -p:Version="$VERSION"
+          -p:AssemblyVersion="$VERSION"
+          -p:FileVersion="$VERSION"
 
       - name: Package zip
         env:
+          PLUGIN_NAME: ${{ matrix.plugin.name }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           python3 - <<'PY'
           import os
           import zipfile
           from pathlib import Path
+          plugin_name = os.environ["PLUGIN_NAME"]
           version = os.environ["VERSION"]
-          zip_name = f"MoreTabs_{version}.zip"
+          zip_name = f"{plugin_name}_{version}.zip"
           with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as archive:
               for path in Path("publish").glob("*.dll"):
                   archive.write(path, path.name)
@@ -80,24 +128,37 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLUGIN_NAME: ${{ matrix.plugin.name }}
           VERSION: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
           CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
         run: |
-          ZIP="MoreTabs_${VERSION}.zip"
-          gh release create "$TAG" "$ZIP" --title "MoreTabs $VERSION" --notes "$CHANGELOG"
+          ZIP="${PLUGIN_NAME}_${VERSION}.zip"
+          gh release create "$TAG" "$ZIP" --title "$PLUGIN_NAME $VERSION" --notes "$CHANGELOG"
 
       - name: Update manifest
         env:
+          PLUGIN_NAME: ${{ matrix.plugin.name }}
+          PLUGIN_GUID: ${{ matrix.plugin.guid }}
           VERSION: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
           CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || 'Automated release' }}
           REPO: ${{ github.repository }}
+          PLUGIN_METADATA: ${{ toJson(matrix.plugin) }}
         run: |
-          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/MoreTabs_${VERSION}.zip"
-          python3 .github/scripts/update-manifest.py "MoreTabs_${VERSION}.zip" "$VERSION" "$SOURCE_URL"
+          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PLUGIN_NAME}_${VERSION}.zip"
+          python3 .github/scripts/update-manifest.py \
+            "${PLUGIN_NAME}_${VERSION}.zip" \
+            "$VERSION" \
+            "$SOURCE_URL" \
+            "$PLUGIN_GUID" \
+            "$PLUGIN_NAME" \
+            "$PLUGIN_METADATA"
 
       - name: Commit manifest
+        env:
+          PLUGIN_NAME: ${{ matrix.plugin.name }}
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -106,5 +167,6 @@ jobs:
             echo "No manifest changes"
             exit 0
           fi
-          git commit -m "chore: publish MoreTabs ${{ steps.version.outputs.value }}"
+          git pull --rebase
+          git commit -m "chore: publish $PLUGIN_NAME $VERSION"
           git push

@@ -1,5 +1,5 @@
 export default function (view) {
-    const pluginId = 'a7f8c2e1-3d4b-5c6a-7e8f-9a0b1c2d3e4f';
+    const pluginId = 'e5c63724-9d4b-469e-87d5-e6410462109a';
     const form = view.querySelector('#SonarrPlaceholderConfigForm');
     const txtSonarrUrl = view.querySelector('#txtSonarrUrl');
     const txtSonarrApiKey = view.querySelector('#txtSonarrApiKey');

@@ -10,7 +10,7 @@ namespace Jellyfin.Plugin.SonarrPlaceholder;
 
 public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
-    public const string PluginGuid = "a7f8c2e1-3d4b-5c6a-7e8f-9a0b1c2d3e4f";
+    public const string PluginGuid = "e5c63724-9d4b-469e-87d5-e6410462109a";
 
     public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
         : base(applicationPaths, xmlSerializer)
