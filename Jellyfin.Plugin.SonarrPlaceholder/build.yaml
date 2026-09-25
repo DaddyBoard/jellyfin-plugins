@@ -1,6 +1,6 @@
 ---
 name: "Sonarr Placeholder"
-guid: "a7f8c2e1-3d4b-5c6a-7e8f-9a0b1c2d3e4f"
+guid: "e5c63724-9d4b-469e-87d5-e6410462109a"
 version: "1.0.0.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
