@@ -112,5 +112,23 @@
         "version": "1.0.0.0"
       }
     ]
+  },
+  {
+    "guid": "e5c63724-9d4b-469e-87d5-e6410462109a",
+    "name": "Sonarr Placeholder",
+    "description": "Shows greyed-out placeholder episode cards for episodes tracked by Sonarr but not yet downloaded or aired. Integrates with Sonarr's API to display missing episodes with countdown timers and air dates in the Jellyfin web UI. Requires File Transformation 3.0+ plugin.\n",
+    "overview": "Show placeholder episodes for unaired/missing content tracked by Sonarr",
+    "owner": "DaddyBoard",
+    "category": "Metadata",
+    "versions": [
+      {
+        "checksum": "aa67cf7d851dd25b91957a9d944f69ac",
+        "changelog": "Automated release",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/SonarrPlaceholder-v1.0.0/SonarrPlaceholder_1.0.0.zip",
+        "timestamp": "2026-09-25T13:58:53Z",
+        "version": "1.0.0"
+      }
+    ]
   }
 ]
