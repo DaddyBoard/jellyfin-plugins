@@ -5,13 +5,17 @@
 
     var STYLE_ID = 'sonarr-placeholder-style-v1';
     var state = {
-        loaded: false,
-        lastSeriesId: null,
-        lastSeasonNumber: null,
-        injectTimer: 0,
         updateTimer: 0,
-        placeholders: []
+        placeholders: [],
+        currentItemId: null,
+        currentItemType: null,
+        episodesCache: {},
+        observer: null
     };
+
+    function log(msg, data) {
+        console.log('[SonarrPlaceholder] ' + msg, data || '');
+    }
 
     function authHeaders() {
         var headers = { accept: 'application/json' };
@@ -22,7 +26,7 @@
                 headers['X-Emby-Token'] = token;
             }
         } catch (e) {
-            console.error('SonarrPlaceholder: failed to get auth headers', e);
+            console.error('[SonarrPlaceholder] Failed to get auth headers', e);
         }
         return headers;
     }
@@ -34,43 +38,19 @@
         var style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = [
-            '.sonarr-placeholder-episode{opacity:.45;pointer-events:none;position:relative;}',
+            '.sonarr-placeholder-episode{opacity:.45;pointer-events:none!important;position:relative;cursor:default!important;}',
+            '.sonarr-placeholder-episode *{pointer-events:none!important;}',
             '.sonarr-placeholder-episode::before{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(128,128,128,.1) 10px,rgba(128,128,128,.1) 20px);z-index:1;pointer-events:none;}',
             '.sonarr-placeholder-overlay{position:absolute;bottom:8px;left:8px;right:8px;background:rgba(0,0,0,.85);padding:8px;border-radius:4px;font-size:.85em;z-index:2;}',
             '.sonarr-placeholder-status{font-weight:bold;color:#ff9800;}',
             '.sonarr-placeholder-countdown{color:#ffc107;font-size:.95em;margin-top:4px;}',
-            '.sonarr-placeholder-aired{color:#f44336;}'
+            '.sonarr-placeholder-aired{color:#f44336;}',
+            '.sonarr-placeholder-row{opacity:.45;pointer-events:none!important;cursor:default!important;}',
+            '.sonarr-placeholder-row *{pointer-events:none!important;}',
+            '.sonarr-placeholder-row .listItemBody{position:relative;}',
+            '.sonarr-placeholder-row .listItemBody::after{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(128,128,128,.1) 10px,rgba(128,128,128,.1) 20px);pointer-events:none;}'
         ].join('');
         document.head.appendChild(style);
-    }
-
-    function parseItemId(id) {
-        if (!id || typeof id !== 'string') {
-            return null;
-        }
-        var parts = id.split('_');
-        if (parts.length < 2) {
-            return null;
-        }
-        return {
-            itemId: parts[0],
-            seasonNumber: parts[1] === 'season' && parts.length > 2 ? parseInt(parts[2], 10) : null
-        };
-    }
-
-    function getCurrentContext() {
-        var hash = window.location.hash || '';
-        var seriesMatch = hash.match(/[#\/]details\?id=([a-f0-9]+)/i);
-        if (!seriesMatch) {
-            return null;
-        }
-        var itemId = seriesMatch[1];
-        var seasonMatch = hash.match(/[&#]season=(\d+)/i);
-        var seasonNumber = seasonMatch ? parseInt(seasonMatch[1], 10) : null;
-        return {
-            itemId: itemId,
-            seasonNumber: seasonNumber
-        };
     }
 
     function getTimeUntil(utcDate) {
@@ -107,28 +87,64 @@
         }
     }
 
-    function createPlaceholderCard(episode, existingCard) {
-        if (!existingCard) {
-            return null;
+    function formatEpisodeCode(seasonNumber, episodeNumber) {
+        var s = String(seasonNumber).padStart(2, '0');
+        var e = String(episodeNumber).padStart(2, '0');
+        return 'S' + s + 'E' + e;
+    }
+
+    function stripInteractiveAttributes(element) {
+        var attrs = ['data-id', 'data-action', 'data-playaccess', 'data-isfolder', 'data-positionticks', 'data-serverid', 'data-type', 'data-itemtype', 'data-itemid', 'data-context'];
+        for (var i = 0; i < attrs.length; i++) {
+            element.removeAttribute(attrs[i]);
         }
-        var clone = existingCard.cloneNode(true);
-        clone.classList.add('sonarr-placeholder-episode');
-        clone.setAttribute('data-sonarr-placeholder', 'true');
-        clone.setAttribute('data-episode-number', episode.episodeNumber);
-        clone.setAttribute('data-season-number', episode.seasonNumber);
-        clone.style.cursor = 'default';
-        var links = clone.querySelectorAll('a');
-        for (var i = 0; i < links.length; i++) {
-            links[i].removeAttribute('href');
-            links[i].style.pointerEvents = 'none';
-        }
-        var titleEl = clone.querySelector('.cardText, .cardTitle, [class*="cardText"], [class*="cardTitle"]');
-        if (titleEl) {
-            titleEl.textContent = 'Episode ' + episode.episodeNumber;
-            if (episode.title && episode.title !== 'TBA') {
-                titleEl.textContent += ' - ' + episode.title;
+        var descendants = element.querySelectorAll('*');
+        for (var j = 0; j < descendants.length; j++) {
+            for (var k = 0; k < attrs.length; k++) {
+                descendants[j].removeAttribute(attrs[k]);
             }
         }
+        var buttons = element.querySelectorAll('button, .cardOverlayButton, [data-action], .itemAction, .playedIndicator, .checkboxContainer, .progressBar');
+        for (var m = 0; m < buttons.length; m++) {
+            buttons[m].remove();
+        }
+        var links = element.querySelectorAll('a');
+        for (var n = 0; n < links.length; n++) {
+            links[n].removeAttribute('href');
+            links[n].onclick = function(e) { e.stopPropagation(); e.preventDefault(); return false; };
+        }
+        element.onclick = function(e) { e.stopPropagation(); e.preventDefault(); return false; };
+    }
+
+    function createPlaceholderCard(episode, templateCard) {
+        if (!templateCard) {
+            return null;
+        }
+        var clone = templateCard.cloneNode(true);
+        clone.classList.add('sonarr-placeholder-episode');
+        clone.setAttribute('data-sonarr-placeholder', 'card');
+        clone.setAttribute('data-episode-number', episode.episodeNumber);
+        clone.setAttribute('data-season-number', episode.seasonNumber);
+        
+        stripInteractiveAttributes(clone);
+        
+        var epCode = formatEpisodeCode(episode.seasonNumber, episode.episodeNumber);
+        var title = episode.title && episode.title !== 'TBA' ? epCode + ' - ' + episode.title : epCode;
+        
+        var titleEl = clone.querySelector('.cardText, .cardTitle, [class*="cardText"], [class*="cardTitle"]');
+        if (titleEl) {
+            titleEl.textContent = title;
+        }
+        
+        var cardImageContainer = clone.querySelector('.cardImageContainer, .cardImage, [class*="cardImage"]');
+        if (cardImageContainer) {
+            var img = cardImageContainer.querySelector('img');
+            if (img) {
+                img.style.opacity = '0.1';
+            }
+            cardImageContainer.style.backgroundColor = '#1c1c1c';
+        }
+        
         var overlayHTML = '<div class="sonarr-placeholder-overlay">';
         if (episode.hasAired) {
             overlayHTML += '<div class="sonarr-placeholder-status sonarr-placeholder-aired">Missing</div>';
@@ -138,7 +154,7 @@
             if (episode.airDateUtc) {
                 var countdown = getTimeUntil(episode.airDateUtc);
                 if (countdown) {
-                    overlayHTML += '<div class="sonarr-placeholder-countdown">' + countdown + '</div>';
+                    overlayHTML += '<div class="sonarr-placeholder-countdown"><span data-air-date-utc="' + episode.airDateUtc + '">' + countdown + '</span></div>';
                 }
                 overlayHTML += '<div>Airs: ' + formatAirDate(episode.airDate) + '</div>';
             } else {
@@ -146,7 +162,7 @@
             }
         }
         overlayHTML += '</div>';
-        var cardImageContainer = clone.querySelector('.cardImageContainer, .cardImage, [class*="cardImage"]');
+        
         if (cardImageContainer) {
             var existingOverlays = cardImageContainer.querySelectorAll('.sonarr-placeholder-overlay');
             for (var j = 0; j < existingOverlays.length; j++) {
@@ -154,77 +170,108 @@
             }
             cardImageContainer.insertAdjacentHTML('beforeend', overlayHTML);
         }
+        
         return clone;
     }
 
-    function findEpisodeContainer() {
-        var containers = document.querySelectorAll('[data-type="Episode"], [data-itemtype="Episode"], .itemsContainer');
-        for (var i = 0; i < containers.length; i++) {
-            var container = containers[i];
-            if (container.querySelector('[data-type="Episode"], [data-itemtype="Episode"]')) {
-                return container;
-            }
+    function createPlaceholderRow(episode, templateRow) {
+        if (!templateRow) {
+            return null;
         }
-        return null;
-    }
-
-    function findExistingEpisodes() {
-        var episodes = {};
-        var cards = document.querySelectorAll('[data-type="Episode"]:not([data-sonarr-placeholder]), [data-itemtype="Episode"]:not([data-sonarr-placeholder])');
-        for (var i = 0; i < cards.length; i++) {
-            var card = cards[i];
-            var link = card.querySelector('a[href*="details"]');
-            if (link) {
-                var href = link.getAttribute('href') || '';
-                var match = href.match(/id=([a-f0-9]+)/i);
-                if (match) {
-                    episodes[match[1]] = card;
+        var clone = templateRow.cloneNode(true);
+        clone.classList.add('sonarr-placeholder-row');
+        clone.setAttribute('data-sonarr-placeholder', 'row');
+        clone.setAttribute('data-episode-number', episode.episodeNumber);
+        clone.setAttribute('data-season-number', episode.seasonNumber);
+        
+        stripInteractiveAttributes(clone);
+        
+        var epCode = formatEpisodeCode(episode.seasonNumber, episode.episodeNumber);
+        
+        var indexNumberEl = clone.querySelector('.listItemIndexNumber, .listItemBody > div:first-child');
+        if (indexNumberEl) {
+            indexNumberEl.textContent = epCode;
+        }
+        
+        var titleEl = clone.querySelector('.listItemBody h3, .listItemBody .listItemBodyText');
+        if (titleEl) {
+            var title = episode.title && episode.title !== 'TBA' ? episode.title : 'Episode ' + episode.episodeNumber;
+            titleEl.textContent = title;
+        }
+        
+        var infoEl = clone.querySelector('.secondary, .listItemBody .secondary, .listItemBodyText + div');
+        if (infoEl) {
+            var infoText = '';
+            if (episode.hasAired) {
+                infoText = 'Missing - Aired: ' + formatAirDate(episode.airDate);
+            } else {
+                if (episode.airDateUtc) {
+                    var countdown = getTimeUntil(episode.airDateUtc);
+                    if (countdown) {
+                        infoText = 'Not aired - <span data-air-date-utc="' + episode.airDateUtc + '">' + countdown + '</span> - Airs: ' + formatAirDate(episode.airDate);
+                    } else {
+                        infoText = 'Not aired - Airs: ' + formatAirDate(episode.airDate);
+                    }
+                } else {
+                    infoText = 'Not aired - Air date: TBA';
                 }
             }
+            infoEl.innerHTML = infoText;
         }
-        return episodes;
+        
+        return clone;
     }
 
-    function injectPlaceholders(missingEpisodes) {
-        ensureStyle();
-        var container = findEpisodeContainer();
+    function clearPlaceholders(container) {
         if (!container) {
             return;
         }
-        var existingEpisodes = findExistingEpisodes();
-        var existingCards = Object.values(existingEpisodes);
-        if (existingCards.length === 0) {
-            return;
-        }
-        var templateCard = existingCards[0];
-        var oldPlaceholders = container.querySelectorAll('[data-sonarr-placeholder="true"]');
+        var oldPlaceholders = container.querySelectorAll('[data-sonarr-placeholder]');
         for (var i = 0; i < oldPlaceholders.length; i++) {
             oldPlaceholders[i].remove();
         }
-        state.placeholders = [];
-        for (var j = 0; j < missingEpisodes.length; j++) {
-            var episode = missingEpisodes[j];
+    }
+
+    function injectCardsIntoContainer(episodes, container, templateCard) {
+        if (!container || !templateCard || !episodes || episodes.length === 0) {
+            return;
+        }
+        clearPlaceholders(container);
+        for (var i = 0; i < episodes.length; i++) {
+            var episode = episodes[i];
             var placeholder = createPlaceholderCard(episode, templateCard);
             if (placeholder) {
                 container.appendChild(placeholder);
-                state.placeholders.push({
-                    element: placeholder,
-                    episode: episode
-                });
             }
         }
+        log('Injected ' + episodes.length + ' card placeholders');
+    }
+
+    function injectRowsIntoContainer(episodes, container, templateRow) {
+        if (!container || !templateRow || !episodes || episodes.length === 0) {
+            return;
+        }
+        clearPlaceholders(container);
+        for (var i = 0; i < episodes.length; i++) {
+            var episode = episodes[i];
+            var placeholder = createPlaceholderRow(episode, templateRow);
+            if (placeholder) {
+                container.appendChild(placeholder);
+            }
+        }
+        log('Injected ' + episodes.length + ' row placeholders');
     }
 
     function updateCountdowns() {
-        for (var i = 0; i < state.placeholders.length; i++) {
-            var item = state.placeholders[i];
-            if (!item.episode.airDateUtc || item.episode.hasAired) {
-                continue;
-            }
-            var countdown = getTimeUntil(item.episode.airDateUtc);
-            var countdownEl = item.element.querySelector('.sonarr-placeholder-countdown');
-            if (countdownEl && countdown) {
-                countdownEl.textContent = countdown;
+        var countdowns = document.querySelectorAll('[data-sonarr-placeholder] [data-air-date-utc]');
+        for (var i = 0; i < countdowns.length; i++) {
+            var el = countdowns[i];
+            var airDateUtc = el.getAttribute('data-air-date-utc');
+            if (airDateUtc) {
+                var countdown = getTimeUntil(airDateUtc);
+                if (countdown) {
+                    el.textContent = countdown;
+                }
             }
         }
     }
@@ -242,138 +289,315 @@
         }
     }
 
-    function fetchAndInject(itemId, seasonNumber) {
-        if (!window.ApiClient) {
+    function stopObserver() {
+        if (state.observer) {
+            state.observer.disconnect();
+            state.observer = null;
+        }
+    }
+
+    function getActiveView() {
+        var pages = document.querySelectorAll('.page');
+        for (var i = 0; i < pages.length; i++) {
+            if (!pages[i].classList.contains('hide')) {
+                return pages[i];
+            }
+        }
+        return null;
+    }
+
+    function findItemIdInUrl() {
+        var hash = window.location.hash || '';
+        var match = hash.match(/[#\/]details\?id=([a-f0-9]+)/i);
+        return match ? match[1] : null;
+    }
+
+    function tryInjectIntoSeriesNextUp(seriesItem, episodes, activeView) {
+        var nextUpSection = activeView.querySelector('#nextUpSection, .nextUpSection, [data-section="nextup"]');
+        if (!nextUpSection) {
+            return false;
+        }
+        var container = nextUpSection.querySelector('.itemsContainer, .scrollSlider');
+        if (!container) {
+            return false;
+        }
+        var existingCards = container.querySelectorAll('[data-type="Episode"]:not([data-sonarr-placeholder]), [data-itemtype="Episode"]:not([data-sonarr-placeholder])');
+        if (existingCards.length === 0) {
+            return false;
+        }
+        var templateCard = existingCards[0];
+        injectCardsIntoContainer(episodes, container, templateCard);
+        return true;
+    }
+
+    function tryInjectIntoSeasonList(seriesItem, seasonNumber, episodes, activeView) {
+        var container = activeView.querySelector('#childrenContent');
+        if (!container) {
+            return false;
+        }
+        var existingRows = container.querySelectorAll('.listItem:not([data-sonarr-placeholder])');
+        if (existingRows.length === 0) {
+            return false;
+        }
+        var templateRow = existingRows[0];
+        injectRowsIntoContainer(episodes, container, templateRow);
+        return true;
+    }
+
+    function tryInjectIntoEpisodeMoreFromSeason(seriesItem, seasonNumber, episodes, activeView) {
+        var moreFromSeasonSection = activeView.querySelector('#moreFromSeasonSection, [data-section="morefromseason"]');
+        if (!moreFromSeasonSection) {
+            return false;
+        }
+        var container = moreFromSeasonSection.querySelector('.itemsContainer, .scrollSlider, #moreFromSeasonItems');
+        if (!container) {
+            return false;
+        }
+        var existingCards = container.querySelectorAll('[data-type="Episode"]:not([data-sonarr-placeholder]), [data-itemtype="Episode"]:not([data-sonarr-placeholder])');
+        if (existingCards.length === 0) {
+            return false;
+        }
+        var templateCard = existingCards[0];
+        injectCardsIntoContainer(episodes, container, templateCard);
+        return true;
+    }
+
+    function setupObserverForView(itemType, seriesItem, seasonNumber, episodes, activeView) {
+        stopObserver();
+        
+        var injectFunc;
+        if (itemType === 'Series') {
+            injectFunc = function() { return tryInjectIntoSeriesNextUp(seriesItem, episodes, activeView); };
+        } else if (itemType === 'Season') {
+            injectFunc = function() { return tryInjectIntoSeasonList(seriesItem, seasonNumber, episodes, activeView); };
+        } else if (itemType === 'Episode') {
+            injectFunc = function() { return tryInjectIntoEpisodeMoreFromSeason(seriesItem, seasonNumber, episodes, activeView); };
+        } else {
             return;
         }
-        window.ApiClient.getItem(window.ApiClient.getCurrentUserId(), itemId).then(function (item) {
-            if (!item || item.Type !== 'Series') {
-                return;
-            }
-            var tvdbId = null;
-            var imdbId = null;
-            if (item.ProviderIds) {
-                tvdbId = item.ProviderIds.Tvdb || item.ProviderIds.tvdb;
-                imdbId = item.ProviderIds.Imdb || item.ProviderIds.imdb;
-            }
-            if (!tvdbId && !imdbId) {
-                return;
-            }
-            var params = [];
-            if (tvdbId) {
-                params.push('tvdbId=' + encodeURIComponent(tvdbId));
-            }
-            if (imdbId) {
-                params.push('imdbId=' + encodeURIComponent(imdbId));
-            }
-            if (seasonNumber != null && seasonNumber >= 0) {
-                params.push('seasonNumber=' + seasonNumber);
-            }
-            var url = window.ApiClient.getUrl('SonarrPlaceholder/MissingEpisodes?' + params.join('&'));
-            fetch(url, {
-                headers: authHeaders(),
-                credentials: 'same-origin'
-            }).then(function (response) {
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status);
+        
+        injectFunc();
+        
+        state.observer = new MutationObserver(function(mutations) {
+            var hasRelevantChange = false;
+            for (var i = 0; i < mutations.length; i++) {
+                var mutation = mutations[i];
+                if (mutation.type === 'childList') {
+                    for (var j = 0; j < mutation.addedNodes.length; j++) {
+                        var node = mutation.addedNodes[j];
+                        if (node.nodeType === 1 && !node.hasAttribute('data-sonarr-placeholder')) {
+                            hasRelevantChange = true;
+                            break;
+                        }
+                    }
+                    for (var k = 0; k < mutation.removedNodes.length; k++) {
+                        var rnode = mutation.removedNodes[k];
+                        if (rnode.nodeType === 1 && !rnode.hasAttribute('data-sonarr-placeholder')) {
+                            hasRelevantChange = true;
+                            break;
+                        }
+                    }
                 }
-                return response.json();
-            }).then(function (episodes) {
-                if (episodes && episodes.length > 0) {
-                    injectPlaceholders(episodes);
-                    startCountdownUpdater();
+                if (hasRelevantChange) {
+                    break;
                 }
-            }).catch(function (error) {
-                console.error('SonarrPlaceholder: failed to fetch missing episodes', error);
-            });
-        }).catch(function (error) {
-            console.error('SonarrPlaceholder: failed to get item details', error);
+            }
+            if (hasRelevantChange) {
+                var currentItemId = findItemIdInUrl();
+                if (currentItemId === state.currentItemId) {
+                    injectFunc();
+                }
+            }
+        });
+        
+        state.observer.observe(activeView, {
+            childList: true,
+            subtree: true
         });
     }
 
-    function inject() {
-        var context = getCurrentContext();
-        if (!context || !context.itemId) {
-            stopCountdownUpdater();
-            state.lastSeriesId = null;
-            state.lastSeasonNumber = null;
+    function fetchEpisodesAndSetupInjection(itemId, itemType, seriesItem, seasonNumber) {
+        var tvdbId = seriesItem.ProviderIds && (seriesItem.ProviderIds.Tvdb || seriesItem.ProviderIds.tvdb);
+        var imdbId = seriesItem.ProviderIds && (seriesItem.ProviderIds.Imdb || seriesItem.ProviderIds.imdb);
+        if (!tvdbId && !imdbId) {
+            log('No TVDB/IMDB ID for series', seriesItem);
             return;
         }
-        if (context.itemId === state.lastSeriesId && context.seasonNumber === state.lastSeasonNumber) {
+        
+        var cacheKey = itemId + '_' + (seasonNumber != null ? seasonNumber : 'all');
+        if (state.episodesCache[cacheKey]) {
+            log('Using cached episodes for ' + cacheKey);
+            var activeView = getActiveView();
+            if (activeView) {
+                setupObserverForView(itemType, seriesItem, seasonNumber, state.episodesCache[cacheKey], activeView);
+                startCountdownUpdater();
+            }
             return;
         }
-        state.lastSeriesId = context.itemId;
-        state.lastSeasonNumber = context.seasonNumber;
-        fetchAndInject(context.itemId, context.seasonNumber);
+        
+        var params = [];
+        if (tvdbId) {
+            params.push('tvdbId=' + encodeURIComponent(tvdbId));
+        }
+        if (imdbId) {
+            params.push('imdbId=' + encodeURIComponent(imdbId));
+        }
+        if (seasonNumber != null && seasonNumber >= 0) {
+            params.push('seasonNumber=' + seasonNumber);
+        }
+        
+        var url = window.ApiClient.getUrl('SonarrPlaceholder/MissingEpisodes?' + params.join('&'));
+        log('Fetching episodes: ' + url);
+        
+        fetch(url, {
+            headers: authHeaders(),
+            credentials: 'same-origin'
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        }).then(function (episodes) {
+            var currentItemId = findItemIdInUrl();
+            if (currentItemId !== state.currentItemId) {
+                log('Item changed during fetch, ignoring response');
+                return;
+            }
+            
+            if (episodes && episodes.length > 0) {
+                log('Fetched ' + episodes.length + ' episodes');
+                state.episodesCache[cacheKey] = episodes;
+                var activeView = getActiveView();
+                if (activeView) {
+                    setupObserverForView(itemType, seriesItem, seasonNumber, episodes, activeView);
+                    startCountdownUpdater();
+                }
+            } else {
+                log('No missing episodes to inject');
+            }
+        }).catch(function (error) {
+            console.error('[SonarrPlaceholder] Failed to fetch missing episodes', error);
+        });
     }
 
-    function scheduleInject() {
-        window.clearTimeout(state.injectTimer);
-        state.injectTimer = window.setTimeout(inject, 500);
-    }
-
-    function startObserver() {
-        if (!document.body) {
+    function handleNewView() {
+        stopObserver();
+        stopCountdownUpdater();
+        state.episodesCache = {};
+        
+        if (!window.ApiClient || !window.ApiClient.getCurrentUserId || !window.ApiClient.getCurrentUserId()) {
+            log('ApiClient not ready');
             return;
         }
-        var observer = new MutationObserver(scheduleInject);
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-
-    function hookHistory() {
-        var originalPush = history.pushState;
-        var originalReplace = history.replaceState;
-        history.pushState = function () {
-            var result = originalPush.apply(this, arguments);
-            scheduleInject();
-            return result;
-        };
-        history.replaceState = function () {
-            var result = originalReplace.apply(this, arguments);
-            scheduleInject();
-            return result;
-        };
-        window.addEventListener('hashchange', scheduleInject);
-        window.addEventListener('popstate', scheduleInject);
-    }
-
-    function waitForApi(attempt) {
-        if (window.ApiClient && window.ApiClient.getCurrentUserId && window.ApiClient.getCurrentUserId()) {
-            state.loaded = true;
-            scheduleInject();
+        
+        var itemId = findItemIdInUrl();
+        if (!itemId) {
+            state.currentItemId = null;
+            state.currentItemType = null;
             return;
         }
-        if (attempt > 80) {
+        
+        state.currentItemId = itemId;
+        log('New view for item ' + itemId);
+        
+        var activeView = getActiveView();
+        if (!activeView) {
+            log('No active view');
             return;
         }
-        window.setTimeout(function () {
-            waitForApi(attempt + 1);
-        }, 250);
+        
+        ensureStyle();
+        
+        window.ApiClient.getItem(window.ApiClient.getCurrentUserId(), itemId).then(function (item) {
+            if (!item) {
+                log('Item not found');
+                return;
+            }
+            
+            if (findItemIdInUrl() !== itemId) {
+                log('Item changed during fetch, aborting');
+                return;
+            }
+            
+            state.currentItemType = item.Type;
+            log('Item type: ' + item.Type);
+            
+            if (item.Type === 'Series') {
+                fetchEpisodesAndSetupInjection(itemId, 'Series', item, null);
+            } else if (item.Type === 'Season') {
+                var seriesId = item.SeriesId;
+                var seasonNumber = item.IndexNumber;
+                if (seriesId && seasonNumber != null) {
+                    return window.ApiClient.getItem(window.ApiClient.getCurrentUserId(), seriesId).then(function (seriesItem) {
+                        if (findItemIdInUrl() !== itemId) {
+                            log('Item changed, aborting');
+                            return;
+                        }
+                        fetchEpisodesAndSetupInjection(itemId, 'Season', seriesItem, seasonNumber);
+                    });
+                }
+            } else if (item.Type === 'Episode') {
+                var seriesId = item.SeriesId;
+                var seasonNumber = item.ParentIndexNumber;
+                if (seriesId && seasonNumber != null) {
+                    return window.ApiClient.getItem(window.ApiClient.getCurrentUserId(), seriesId).then(function (seriesItem) {
+                        if (findItemIdInUrl() !== itemId) {
+                            log('Item changed, aborting');
+                            return;
+                        }
+                        fetchEpisodesAndSetupInjection(itemId, 'Episode', seriesItem, seasonNumber);
+                    });
+                }
+            }
+        }).catch(function (error) {
+            console.error('[SonarrPlaceholder] Failed to get item', error);
+        });
+    }
+
+    function setupEventListeners() {
+        document.addEventListener('viewshow', function () {
+            log('viewshow event');
+            handleNewView();
+        });
+        
+        document.addEventListener('pageshow', function () {
+            log('pageshow event');
+            handleNewView();
+        });
+        
+        window.addEventListener('hashchange', function () {
+            log('hashchange event');
+            handleNewView();
+        });
+    }
+
+    function init() {
+        log('Initializing v1.0.0.1');
+        ensureStyle();
+        setupEventListeners();
+        
+        setTimeout(function() {
+            handleNewView();
+        }, 100);
     }
 
     window.SonarrPlaceholder = {
         getState: function () {
             return {
-                loaded: state.loaded,
-                lastSeriesId: state.lastSeriesId,
-                lastSeasonNumber: state.lastSeasonNumber,
-                placeholderCount: state.placeholders.length
+                currentItemId: state.currentItemId,
+                currentItemType: state.currentItemType,
+                observerActive: !!state.observer
             };
         },
         refresh: function () {
-            state.lastSeriesId = null;
-            state.lastSeasonNumber = null;
-            scheduleInject();
+            log('Manual refresh requested');
+            handleNewView();
         }
     };
 
-    ensureStyle();
-    hookHistory();
-    if (document.body) {
-        startObserver();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        document.addEventListener('DOMContentLoaded', startObserver);
+        init();
     }
-    waitForApi(0);
-    console.log('SonarrPlaceholder client loaded');
 })();

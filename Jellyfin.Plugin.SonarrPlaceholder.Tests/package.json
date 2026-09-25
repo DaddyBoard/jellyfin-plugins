@@ -1,0 +1,12 @@
+{
+  "name": "sonarr-placeholder-tests",
+  "version": "1.0.0",
+  "description": "Tests for SonarrPlaceholder client.js",
+  "main": "client.test.js",
+  "scripts": {
+    "test": "node client.test.js"
+  },
+  "dependencies": {
+    "jsdom": "^25.0.1"
+  }
+}
