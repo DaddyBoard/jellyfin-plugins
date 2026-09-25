@@ -122,6 +122,14 @@
     "category": "Metadata",
     "versions": [
       {
+        "checksum": "df47a801da89c5d4b639b7b2dce622d3",
+        "changelog": "Merge pull request #9 from DaddyBoard/cursor/fix-sonarr-placeholder-injection-3beb\n\nFix SonarrPlaceholder injection reliability and add Season/Episode page support",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/DaddyBoard/jellyfin-plugins/releases/download/SonarrPlaceholder-v1.0.0.1/SonarrPlaceholder_1.0.0.1.zip",
+        "timestamp": "2026-09-25T14:34:21Z",
+        "version": "1.0.0.1"
+      },
+      {
         "checksum": "aa67cf7d851dd25b91957a9d944f69ac",
         "changelog": "Automated release",
         "targetAbi": "12.0.0.0",
