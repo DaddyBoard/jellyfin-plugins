@@ -1,0 +1,70 @@
+<div id="SonarrPlaceholderConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-controller="__plugin/Sonarr Placeholder.js">
+    <div class="content-primary">
+        <div class="verticalSection">
+            <div class="sectionTitleContainer">
+                <h2 class="sectionTitle">Sonarr Placeholder</h2>
+            </div>
+            <p>Show placeholder episode cards for unaired or missing episodes tracked by Sonarr. Placeholders appear greyed-out in the Jellyfin web UI alongside real episodes, with countdown timers for upcoming releases.</p>
+            <p><strong>Requirements:</strong> This plugin relies on the <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File Transformation</a> plugin to inject client-side JavaScript. Install File Transformation 3.0+ from the Jellyfin plugin catalog before using this plugin.</p>
+        </div>
+        <form id="SonarrPlaceholderConfigForm">
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Sonarr Connection</h3>
+                <div class="inputContainer">
+                    <input is="emby-input" type="text" id="txtSonarrUrl" label="Sonarr URL:" />
+                    <div class="fieldDescription">Base URL of your Sonarr instance (e.g., http://localhost:8989)</div>
+                </div>
+                <div class="inputContainer">
+                    <input is="emby-input" type="password" id="txtSonarrApiKey" label="Sonarr API Key:" />
+                    <div class="fieldDescription">Found in Sonarr under Settings → General → Security</div>
+                </div>
+                <div style="margin-bottom:1em;">
+                    <button is="emby-button" type="button" class="raised" id="btnTestConnection">
+                        <span>Test Connection</span>
+                    </button>
+                    <span id="testConnectionResult" style="margin-left:1em;"></span>
+                </div>
+            </div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Display Options</h3>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="chkEnabled" />
+                        <span>Enable Sonarr Placeholder</span>
+                    </label>
+                    <div class="fieldDescription">Master switch to enable/disable the plugin</div>
+                </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="chkShowAiredButMissing" />
+                        <span>Show aired but missing episodes</span>
+                    </label>
+                    <div class="fieldDescription">Include episodes that have aired but aren't downloaded yet</div>
+                </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="chkShowUnairedEpisodes" />
+                        <span>Show unaired episodes</span>
+                    </label>
+                    <div class="fieldDescription">Include episodes that haven't aired yet</div>
+                </div>
+                <div class="inputContainer">
+                    <input is="emby-input" type="number" id="txtMaxDaysAhead" label="Maximum days ahead:" min="1" max="3650" />
+                    <div class="fieldDescription">How far into the future to show unaired episodes (1-3650 days)</div>
+                </div>
+            </div>
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Performance</h3>
+                <div class="inputContainer">
+                    <input is="emby-input" type="number" id="txtCacheDuration" label="Cache duration (minutes):" min="1" max="120" />
+                    <div class="fieldDescription">How long to cache Sonarr data before refreshing (1-120 minutes)</div>
+                </div>
+            </div>
+            <div>
+                <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                    <span>Save</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
