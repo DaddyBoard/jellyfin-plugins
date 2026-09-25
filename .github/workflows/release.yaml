@@ -150,22 +150,30 @@ jobs:
           REPO: ${{ github.repository }}
           PLUGIN_METADATA: ${{ toJson(matrix.plugin) }}
         run: |
-          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PLUGIN_SLUG}_${VERSION}.zip"
-          CHECKSUM=$(cat checksum.txt)
           mkdir -p manifest-updates
           python3 - <<'PY'
           import os
           import json
+          from pathlib import Path
+          
+          plugin_slug = os.environ["PLUGIN_SLUG"]
+          version = os.environ["VERSION"]
+          tag = os.environ["TAG"]
+          repo = os.environ["REPO"]
+          
+          source_url = f"https://github.com/{repo}/releases/download/{tag}/{plugin_slug}_{version}.zip"
+          checksum = Path("checksum.txt").read_text().strip()
+          
           data = {
-              "zip": f"{os.environ['PLUGIN_SLUG']}_{os.environ['VERSION']}.zip",
-              "version": os.environ["VERSION"],
-              "sourceUrl": os.environ["SOURCE_URL"],
+              "zip": f"{plugin_slug}_{version}.zip",
+              "version": version,
+              "sourceUrl": source_url,
               "guid": os.environ["PLUGIN_GUID"],
               "name": os.environ["PLUGIN_NAME"],
-              "checksum": os.environ["CHECKSUM"],
+              "checksum": checksum,
               "metadata": json.loads(os.environ["PLUGIN_METADATA"])
           }
-          with open(f"manifest-updates/{os.environ['PLUGIN_SLUG']}.json", "w") as f:
+          with open(f"manifest-updates/{plugin_slug}.json", "w") as f:
               json.dump(data, f, indent=2)
           PY
 
